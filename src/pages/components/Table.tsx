@@ -1,9 +1,9 @@
 function ApproachBadge(props: any) {
   const approach = props.approach;
-  const apporachName = approach.name;
+  const approachName = approach.name;
 
   // split by space and dash
-  const type = apporachName.split(/[\s-\/]/)[0];
+  const type = approachName.split(/[\s-\/]/)[0];
 
   let color = 'bg-gray-100';
   switch (type) {
@@ -35,7 +35,7 @@ function ApproachBadge(props: any) {
       className={`inline-flex items-center rounded-full ${color} px-2.5 py-0.5 m-0.5 text-xs font-medium text-gray-800`}
       title={`FAF MSL: ${approach.faf.msl} ft, AGL: ${approach.faf.agl} ft`}
     >
-      {apporachName}
+      {approachName}
     </span>
   )
 }
