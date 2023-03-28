@@ -1,3 +1,5 @@
+name: Load CIFP Data
+
 on:
   schedule:
     - cron: '0 0 * * 0' # Weekly on Sunday at midnight

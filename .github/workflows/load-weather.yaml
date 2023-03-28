@@ -1,3 +1,5 @@
+name: Load Weather Forecasts
+
 on:
   schedule:
     - cron: '45 * * * *' # Hourly at 45 minutes past the hour
