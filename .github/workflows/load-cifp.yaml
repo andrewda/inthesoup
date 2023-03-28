@@ -1,6 +1,6 @@
 on:
   schedule:
-    - cron: '45 * * * *' # Hourly at 45 minutes past the hour
+    - cron: '0 0 * * 0' # Weekly on Sunday at midnight
 
   workflow_dispatch:
 
@@ -16,4 +16,4 @@ jobs:
       - name: Install dependencies
         run: pip3 install -r data/requirements.txt
       - name: Load weather data
-        run: python3 data/load_weather.py
+        run: python3 data/load_cifp.py

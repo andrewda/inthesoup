@@ -1,11 +1,10 @@
 on:
-  schedule:
-    - cron: '45 * * * *' # Hourly at 45 minutes past the hour
-
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-  load-weather:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -13,7 +12,11 @@ jobs:
         uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
       - name: Install dependencies
-        run: pip3 install -r data/requirements.txt
-      - name: Load weather data
-        run: python3 data/load_weather.py
+        run: npm install
+      - name: Deploy to App Engine
+        run: npm run deploy

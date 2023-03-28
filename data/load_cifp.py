@@ -3,12 +3,14 @@ Parse the FAA's CIFP file to extract airport and approach/FAF data.
 """
 
 import json
-import sys
+import os
+import zipfile
 
 import arinc424.record as a424
 import google.auth
 import pandas as pd
 import pandas_gbq
+import requests
 from tqdm import tqdm
 
 credentials, project = google.auth.default()
@@ -30,6 +32,52 @@ def dms_to_dd(dms):
   s = int(dms[5:9]) / 100
 
   return sign * (d + m / 60 + s / 3600)
+
+
+def get_current_cifp_url():
+  """Get the download URL for the current CIFP file.
+  @return: The current CIFP file download URL
+  """
+
+  url = 'https://soa.smext.faa.gov/apra/cifp/chart?edition=current'
+  headers = {'accept': 'application/json'}
+  r = requests.get(url, headers=headers)
+  res = r.json()
+
+  for edition in res['edition']:
+    if edition['editionName'] == 'CURRENT':
+      return edition['product']['url']
+
+  return None
+
+
+def download_cifp():
+  url = get_current_cifp_url()
+
+  if url is None:
+    print('Unable to find current CIFP file.')
+    return
+
+  print('Downloading CIFP file...')
+
+  r = requests.get(url, stream=True)
+  total_size_in_bytes = int(r.headers.get('content-length', 0))
+  block_size = 1024 #1 Kibibyte
+  progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True)
+
+  with open('/tmp/cifp.zip', 'wb') as f:
+    for data in r.iter_content(block_size):
+      progress_bar.update(len(data))
+      f.write(data)
+
+  progress_bar.close()
+
+  print('Extracting CIFP file...')
+
+  with zipfile.ZipFile('/tmp/cifp.zip', 'r') as zip_ref:
+    zip_ref.extractall('/tmp/cifp')
+
+  return '/tmp/cifp/FAACIFP18'
 
 
 def parse_cifp(file_path):
@@ -84,7 +132,7 @@ def parse_cifp(file_path):
 
 
 if __name__ == '__main__':
-  file_path = sys.argv[1]
+  file_path = download_cifp()
 
   df_apt, df_faf = parse_cifp(file_path)
 

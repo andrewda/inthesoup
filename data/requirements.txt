@@ -2,4 +2,5 @@ arinc424 @ git+https://github.com/andrewda/arinc424@996025203aebf0a3794d2e337fe5
 google-auth==2.16.3
 pandas==1.5.3
 pandas-gbq==0.19.1
+requests==2.28.2
 tqdm==4.64.1
