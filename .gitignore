@@ -34,3 +34,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# CIFP files
+CIFP_*
+CIFP_*.zip
+
+# Data CSVs
+data/*.csv

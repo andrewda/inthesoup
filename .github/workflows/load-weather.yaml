@@ -1,0 +1,15 @@
+on:
+  schedule:
+    - cron: '45 * * * *' # Hourly at 45 minutes past the hour
+
+  workflow_dispatch:
+
+jobs:
+  load-weather:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: pip3 install -r data/requirements.txt
+      - name: Load weather data
+        run: python3 data/load_weather.py
