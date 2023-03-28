@@ -3,5 +3,5 @@ runtime: nodejs18
 service: default
 handlers:
   - url: /.*
-    secure: optional
+    secure: always
     script: auto
