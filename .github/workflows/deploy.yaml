@@ -25,3 +25,7 @@ jobs:
         run: npm run build
       - name: Deploy to App Engine
         uses: google-github-actions/deploy-appengine@v1
+      - name: Remove old versions
+        uses: Reviewable/appengine-remove-action@v3.0.0
+        with:
+          limit: 5
