@@ -7,15 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  load-weather:
+  load-cifp:
+    name: Load CIFP Data
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: Authenticate to Google Cloud
-        uses: 'google-github-actions/auth@v1'
+        uses: google-github-actions/auth@v1
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
       - name: Install dependencies
         run: pip3 install -r data/requirements.txt
-      - name: Load weather data
+      - name: Load CIFP data
         run: python3 data/load_cifp.py

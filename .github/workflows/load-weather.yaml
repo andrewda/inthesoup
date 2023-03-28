@@ -8,11 +8,12 @@ on:
 
 jobs:
   load-weather:
+    name: Load Weather Forecasts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: Authenticate to Google Cloud
-        uses: 'google-github-actions/auth@v1'
+        uses: google-github-actions/auth@v1
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
       - name: Install dependencies

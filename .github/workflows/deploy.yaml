@@ -7,18 +7,21 @@ on:
 
 jobs:
   deploy:
+    name: Deploy to App Engine
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: Authenticate to Google Cloud
-        uses: 'google-github-actions/auth@v1'
+        uses: google-github-actions/auth@v1
         with:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
       - name: Setup Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '18'
+          node-version: 18
       - name: Install dependencies
         run: npm install
+      - name: Build Next.js app
+        run: npm run build
       - name: Deploy to App Engine
-        run: npm run deploy
+        uses: google-github-actions/deploy-appengine@v1
