@@ -2,6 +2,7 @@
 Loads weather data from NOAA and uploads it to BigQuery.
 """
 
+import time
 from datetime import datetime, timedelta
 from ftplib import FTP
 from io import StringIO
@@ -115,7 +116,22 @@ def parse_weather_data(data, fmt):
 
 
 if __name__ == '__main__':
-  nbh, nbs = get_weather_data()
+  # Retry up to 6 times with 30 second delay
+  nbh = None
+  nbs = None
+  for i in range(6):
+    try:
+      nbh, nbs = get_weather_data()
+      break
+    except Exception as e:
+      print(e)
+      print(f'Error getting weather data. Retrying in 30 seconds... ({i + 1}/5)')
+      time.sleep(30)
+
+  # Exit if we couldn't get the data
+  if nbh is None or nbs is None:
+    print('Error getting weather data. Exiting...')
+    exit(1)
 
   # Split the data into separate locations
   nbh = nbh.strip().split(' ' * 50)[1:]
