@@ -116,22 +116,24 @@ def parse_weather_data(data, fmt):
 
 
 if __name__ == '__main__':
-  # Retry up to 6 times with 30 second delay
   nbh = None
   nbs = None
-  for i in range(6):
+
+  # Retry up to 10 times with 60 second delay
+  n_tries = 10
+  for i in range(n_tries):
     try:
       nbh, nbs = get_weather_data()
       break
     except Exception as e:
       print(e)
-      print(f'Error getting weather data. Retrying in 30 seconds... ({i + 1}/5)')
-      time.sleep(30)
+      print(f'Error getting weather data. Retrying in 60 seconds... ({i + 1}/{n_tries})')
+      time.sleep(60)
 
   # Exit if we couldn't get the data
   if nbh is None or nbs is None:
     print('Error getting weather data. Exiting...')
-    exit(1)
+    exit()
 
   # Split the data into separate locations
   nbh = nbh.strip().split(' ' * 50)[1:]
