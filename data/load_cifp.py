@@ -41,7 +41,7 @@ def get_current_cifp_url():
 
   url = 'https://soa.smext.faa.gov/apra/cifp/chart?edition=current'
   headers = {'accept': 'application/json'}
-  r = requests.get(url, headers=headers)
+  r = requests.get(url, headers=headers, verify=False)
   res = r.json()
 
   for edition in res['edition']:
