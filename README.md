@@ -3,9 +3,10 @@
 Find nearby instrument approaches in IMC.
 
 > **Warning**
-> This app is not to be used for flight planning or navigational purposes. The
-> weather data is not guaranteed to be accurate, and the instrument approach
-> data is not guaranteed to be complete. Use at your own risk.
+> This app should not be used as a replacement for safe preflight planning
+> practices. All weather data is not guaranteed to be accurate, and the
+> instrument approach data is not guaranteed to be complete. Always check the
+> official sources before flying, especially when venturing into IMC.
 
 ## What is this?
 
