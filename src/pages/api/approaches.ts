@@ -172,7 +172,7 @@ export default async function handler(
 ) {
   const airport = req.query.airport as string;
   const radius = Number(req.query.radius);
-  const forecast = req.query.forecast || '24hr';
+  const forecast = (Array.isArray(req.query.forecast) ? req.query.forecast[0] : req.query.forecast) ?? 'nbh';
 
   if (!airport || !radius) {
     res.status(400).json({ error: 'Missing required query parameters' });
@@ -184,13 +184,14 @@ export default async function handler(
     return;
   }
 
-  if (forecast !== '24hr' && forecast !== '72hr') {
-    res.status(400).json({ error: 'Forecast must be 24hr or 72hr' });
+  const validForecastTypes = ['metar', 'nbh', 'nbs'];
+  if (!validForecastTypes.includes(forecast)) {
+    res.status(400).json({ error: 'Forecast must be METAR, NBH or NBS' });
     return;
   }
 
   // Use NBH for 24hr forecast, NBS for 72hr forecast
-  const query = baseQuery.replace('[FORECAST_TYPE]', forecast === '24hr' ? 'nbh' : 'nbs')
+  const query = baseQuery.replace('[FORECAST_TYPE]', forecast)
 
   const options = {
     query,

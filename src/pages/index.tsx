@@ -5,7 +5,7 @@ import Table from './components/Table'
 export default function Home() {
   const [airport, setAirport] = useState('')
   const [radius, setRadius] = useState('50')
-  const [forecast, setForecast] = useState('24hr')
+  const [forecast, setForecast] = useState('metar')
 
   const [loading, setLoading] = useState(false)
   const [forecasts, setForecasts] = useState<any[] | null>(null)
@@ -84,7 +84,7 @@ export default function Home() {
 
               <div className="col-span-2">
                 <label htmlFor="forecast" className="block text-sm font-medium leading-6 text-gray-900">
-                  Forecast
+                  Weather Source
                 </label>
                 <div className="mt-2">
                   <select
@@ -94,8 +94,9 @@ export default function Home() {
                     value={forecast}
                     onChange={(e) => setForecast(e.target.value)}
                   >
-                    <option value="24hr">24hr (1hr period)</option>
-                    <option value="72hr">72hr (3hr period)</option>
+                    <option value="metar">METAR (current)</option>
+                    <option value="nbh">NBH (24hr, 1hr period)</option>
+                    <option value="nbs">NBS (72hr, 3hr period)</option>
                   </select>
                 </div>
               </div>

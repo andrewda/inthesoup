@@ -10,12 +10,40 @@ from io import StringIO
 import google.auth
 import pandas as pd
 import pandas_gbq
+import requests
 from tqdm import tqdm
 
 credentials, project = google.auth.default()
 
 
-def get_weather_data():
+def c_to_f(c):
+  """Convert Celsius to Fahrenheit.
+  @param c: Temperature in Celsius
+  @return: Temperature in Fahrenheit
+  """
+
+  return c * 9 / 5 + 32
+
+
+def sm_to_km(sm):
+  """Convert statute miles to kilometers.
+  @param sm: Distance in statute miles
+  @return: Distance in kilometers
+  """
+
+  return sm * 1.60934
+
+
+def round_to_nearest_10(x):
+  """Round a number to the nearest 10.
+  @param x: The number to round
+  @return: The rounded number
+  """
+
+  return int(round(x / 10.0)) * 10
+
+
+def get_noaa_data():
   """Get weather data from NOAA.
   @return: Tuple of (nbh, nbs) where nbh is the weather data for the next 24 hours
   and nbs is the weather data for the next 72 hours (in 3hr increments).
@@ -26,7 +54,7 @@ def get_weather_data():
   ftp = FTP('ftp.ncep.noaa.gov')
   ftp.login()
 
-  ftp.cwd('pub/data/nccf/com/blend/prod')
+  ftp.cwd('/pub/data/nccf/com/blend/prod')
 
   # Get forecast days
   forecast_days = ftp.nlst()
@@ -54,7 +82,75 @@ def get_weather_data():
   return nbh, nbs
 
 
-def parse_weather_data(data, fmt):
+def get_metar_data():
+  """Get METAR data from aviationweather.gov.
+  """
+
+  # We must split the US into 3 regions to get all the data
+  bboxes = [
+    '-125.771484,28.524736,-102.744141,49.322923', # Western US
+    '-103.350588,25.536738,-86.695315,49.371110', # Central US
+    '-87.099609,23.992635,-63.193359,49.408788', # Eastern US
+  ]
+
+  metar_data = pd.DataFrame()
+  for bbox in bboxes:
+    print(f'Getting METAR data for bbox {bbox}...')
+
+    res = requests.get(f'https://www.aviationweather.gov/cgi-bin/json/MetarJSON.php?taf=true&density=all&bbox={bbox}')
+
+    if res.status_code != 200:
+      print(f'Error getting METAR data for bbox {bbox}')
+      continue
+
+    data = res.json()
+
+    for observation in data['features']:
+      if 'id' not in observation['properties']:
+        continue
+
+      if observation['properties']['id'] in metar_data.index:
+        continue
+
+      df = pd.DataFrame(index=[observation['properties']['id']])
+
+      df['Location'] = [observation['properties']['id']]
+      df['Time'] = [datetime.strptime(observation['properties']['obsTime'], '%Y-%m-%dT%H:%M:%SZ')]
+      df['Forecast_Time'] = [datetime.strptime(observation['properties']['obsTime'], '%Y-%m-%dT%H:%M:%SZ')]
+
+      df['TMP'] = [c_to_f(observation['properties']['temp']) if 'temp' in observation['properties'] else None]
+      df['DPT'] = [c_to_f(observation['properties']['dewp']) if 'dewp' in observation['properties'] else None]
+      df['WDR'] = [observation['properties']['wdir'] / 10 if 'wdir' in observation['properties'] else None]
+      df['WSP'] = [observation['properties']['wspd'] if 'wspd' in observation['properties'] else None]
+      df['CIG'] = [observation['properties']['ceil'] if 'ceil' in observation['properties'] else None]
+      df['LCB'] = [int(observation['properties']['cldBas1']) if 'cldBas1' in observation['properties'] else None]
+      df['VIS'] = [sm_to_km(observation['properties']['visib']) * 10 if 'visib' in observation['properties'] else None]
+      df['IFC'] = [None]
+
+      df['METAR'] = [observation['properties']['rawOb']]
+      df['TAF'] = [observation['properties']['rawTaf'] if 'rawTaf' in observation['properties'] else None]
+
+      metar_data = pd.concat([metar_data, df])
+
+  # set column types
+  metar_data['Location'] = metar_data['Location'].astype('category')
+  metar_data['Time'] = pd.to_datetime(metar_data['Time'])
+  metar_data['Forecast_Time'] = pd.to_datetime(metar_data['Forecast_Time'])
+  metar_data['TMP'] = metar_data['TMP'].astype('float')
+  metar_data['DPT'] = metar_data['DPT'].astype('float')
+  metar_data['WDR'] = metar_data['WDR'].astype('float')
+  metar_data['WSP'] = metar_data['WSP'].astype('float')
+  metar_data['CIG'] = metar_data['CIG'].astype('float')
+  metar_data['LCB'] = metar_data['LCB'].astype('float')
+  metar_data['VIS'] = metar_data['VIS'].astype('float')
+  metar_data['IFC'] = metar_data['IFC'].astype('float')
+  metar_data['METAR'] = metar_data['METAR'].astype('str')
+  metar_data['TAF'] = metar_data['TAF'].astype('str')
+
+  return metar_data
+
+
+def parse_noaa_data(data, fmt):
   """Parse weather data for a specific location
   @param data: The weather data to parse
   @param fmt: The format of the data. Either 'nbh' or 'nbs'
@@ -119,46 +215,53 @@ if __name__ == '__main__':
   nbh = None
   nbs = None
 
+  metar = get_metar_data()
+
   # Retry up to 10 times with 60 second delay
   n_tries = 10
   for i in range(n_tries):
     try:
-      nbh, nbs = get_weather_data()
+      nbh, nbs = get_noaa_data()
       break
     except Exception as e:
       print(e)
       print(f'Error getting weather data. Retrying in 60 seconds... ({i + 1}/{n_tries})')
       time.sleep(60)
 
-  # Exit if we couldn't get the data
-  if nbh is None or nbs is None:
-    print('Error getting weather data. Exiting...')
-    exit()
+  df_nbh = None
+  if nbh is not None:
+    print('Parsing NBH forecast data...')
 
-  # Split the data into separate locations
-  nbh = nbh.strip().split(' ' * 50)[1:]
-  nbs = nbs.strip().split(' ' * 50)[1:]
+    nbh = nbh.strip().split(' ' * 50)[1:]
 
-  print('Parsing NBH forecast data...')
+    df_nbh = pd.DataFrame()
+    for forecast in tqdm(nbh):
+      location_forecast = parse_noaa_data(forecast, 'nbh')
+      df_nbh = pd.concat([df_nbh, location_forecast])
 
-  df_nbh = pd.DataFrame()
-  for forecast in tqdm(nbh):
-    location_forecast = parse_weather_data(forecast, 'nbh')
-    df_nbh = pd.concat([df_nbh, location_forecast])
+    df_nbh.to_csv('wx_nbh.csv', index=False)
 
-  df_nbh.to_csv('wx_nbh.csv', index=False)
+  df_nbs = None
+  if nbs is not None:
+    print('Parsing NBS forecast data...')
 
-  print('Parsing NBS forecast data...')
+    nbs = nbs.strip().split(' ' * 50)[1:]
 
-  df_nbs = pd.DataFrame()
-  for forecast in tqdm(nbs):
-    location_forecast = parse_weather_data(forecast, 'nbs')
-    df_nbs = pd.concat([df_nbs, location_forecast])
+    df_nbs = pd.DataFrame()
+    for forecast in tqdm(nbs):
+      location_forecast = parse_noaa_data(forecast, 'nbs')
+      df_nbs = pd.concat([df_nbs, location_forecast])
 
-  df_nbs.to_csv('wx_nbs.csv', index=False)
+    df_nbs.to_csv('wx_nbs.csv', index=False)
 
   print('Uploading to BigQuery...')
 
   # Upload to BigQuery
-  pandas_gbq.to_gbq(df_nbh, 'weather.nbh', project, if_exists='replace', credentials=credentials)
-  pandas_gbq.to_gbq(df_nbs, 'weather.nbs', project, if_exists='replace', credentials=credentials)
+  if metar is not None:
+    pandas_gbq.to_gbq(metar, 'weather.metar', project, if_exists='replace', credentials=credentials)
+
+  if df_nbh is not None:
+    pandas_gbq.to_gbq(df_nbh, 'weather.nbh', project, if_exists='replace', credentials=credentials)
+
+  if df_nbs is not None:
+    pandas_gbq.to_gbq(df_nbs, 'weather.nbs', project, if_exists='replace', credentials=credentials)
