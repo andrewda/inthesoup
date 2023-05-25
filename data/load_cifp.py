@@ -11,6 +11,7 @@ import google.auth
 import pandas as pd
 import pandas_gbq
 import requests
+from charts import get_charts, merge_charts
 from tqdm import tqdm
 
 credentials, project = google.auth.default()
@@ -34,7 +35,7 @@ def dms_to_dd(dms):
   return sign * (d + m / 60 + s / 3600)
 
 
-def get_current_cifp_url():
+def get_current_cifp_cycle():
   """Get the download URL for the current CIFP file.
   @return: The current CIFP file download URL
   """
@@ -46,14 +47,15 @@ def get_current_cifp_url():
 
   for edition in res['edition']:
     if edition['editionName'] == 'CURRENT':
-      return edition['product']['url']
+      url = edition['product']['url']
+      cycle = url.split('_')[-1][:4]
 
-  return None
+      return url, cycle
+
+  return None, None
 
 
-def download_cifp():
-  url = get_current_cifp_url()
-
+def download_cifp(url):
   if url is None:
     print('Unable to find current CIFP file.')
     return
@@ -132,7 +134,9 @@ def parse_cifp(file_path):
 
 
 if __name__ == '__main__':
-  file_path = download_cifp()
+  url, cycle = get_current_cifp_cycle()
+
+  file_path = download_cifp(url)
 
   df_apt, df_faf = parse_cifp(file_path)
 
@@ -152,6 +156,12 @@ if __name__ == '__main__':
   df_faf = df_faf.mask(df_faf == '')
   columns = ['RNP', 'Arc_Radius', 'Theta', 'Rho', 'Magnetic_Course', 'Route_Holding_Distance_or_Time', 'Altitude', 'Altitude_2', 'Speed_Limit', 'Transition_Altitude', 'Vertical_Angle']
   df_faf[columns] = df_faf[columns].apply(pd.to_numeric, errors='coerce')
+
+  # Get charts
+  df_charts = get_charts(cycle)
+
+  # Merge charts
+  df_faf = merge_charts(df_faf, df_charts)
 
   df_apt.to_csv('apt.csv', index=False)
   df_faf.to_csv('faf.csv', index=False)

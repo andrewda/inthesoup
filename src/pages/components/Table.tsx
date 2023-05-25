@@ -1,6 +1,7 @@
 function ApproachBadge(props: any) {
   const approach = props.approach;
   const approachName = approach.name;
+  const approachChart = approach.chart;
 
   // split by space and dash
   const type = approachName.split(/[\s-\/]/)[0];
@@ -30,14 +31,24 @@ function ApproachBadge(props: any) {
       break;
   }
 
-  return (
+  const badge = (
     <span
       className={`inline-flex items-center rounded-full ${color} px-2.5 py-0.5 m-0.5 text-xs font-medium text-gray-800`}
       title={`FAF MSL: ${approach.faf.msl} ft, AGL: ${approach.faf.agl} ft`}
     >
       {approachName}
     </span>
-  )
+  );
+
+  if (approachChart) {
+    return (
+      <a href={`https://aeronav.faa.gov/d-tpp/${approachChart}`} target="_blank">
+        {badge}
+      </a>
+    )
+  } else {
+    return badge;
+  }
 }
 
 export default function Table(props: { forecasts: any[] }) {

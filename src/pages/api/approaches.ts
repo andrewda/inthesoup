@@ -48,6 +48,8 @@ SELECT
   ANY_VALUE(wx.WSP) AS WSP,
   ANY_VALUE(wx.IFC) / 100 AS IFC,
   ARRAY_AGG(Filtered_FAF_Airport.SIDSTARApproach_Identifier ORDER BY Filtered_FAF_Airport.SIDSTARApproach_Identifier ASC) AS Approach_Identifier,
+  ARRAY_AGG(IFNULL(Filtered_FAF_Airport.Approach_Name, '') ORDER BY Filtered_FAF_Airport.SIDSTARApproach_Identifier ASC) AS Approach_Name,
+  ARRAY_AGG(IFNULL(Filtered_FAF_Airport.PDF_Name, '') ORDER BY Filtered_FAF_Airport.SIDSTARApproach_Identifier ASC) AS PDF_Name,
   ARRAY_AGG(Filtered_FAF_Airport.Altitude ORDER BY Filtered_FAF_Airport.SIDSTARApproach_Identifier ASC) AS FAF_MSL,
   ARRAY_AGG(Filtered_FAF_Airport.Altitude - apt.Airport_Elevation ORDER BY Filtered_FAF_Airport.SIDSTARApproach_Identifier ASC) AS FAF_AGL,
   ANY_VALUE(Filtered_FAF_Airport.Latitude) AS Latitude,
@@ -225,13 +227,23 @@ export default async function handler(
     },
     approaches: row.Approach_Identifier.map((id: string, i: number) => ({
       id,
-      name: approachIdToName(id),
+      name: row.Approach_Name[i] || approachIdToName(id),
+      chart: row.PDF_Name[i] || null,
       faf: {
         msl: row.FAF_MSL[i],
         agl: row.FAF_AGL[i],
       }
     } as Approach)),
   }));
+
+  // Remove duplicate approaches (based on the name field)
+  response.forEach(row => {
+    const uniqueApproaches = new Map<string, Approach>();
+    row.approaches.forEach((approach: any) => {
+      uniqueApproaches.set(approach.name, approach);
+    });
+    row.approaches = Array.from(uniqueApproaches.values());
+  });
 
   res.status(200).json(response);
 }
