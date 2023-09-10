@@ -13,6 +13,7 @@ import pandas_gbq
 import requests
 from charts import get_charts, merge_charts
 from tqdm import tqdm
+from bs4 import BeautifulSoup
 
 credentials, project = google.auth.default()
 
@@ -40,19 +41,28 @@ def get_current_cifp_cycle():
   @return: The current CIFP file download URL
   """
 
-  url = 'https://soa.smext.faa.gov/apra/cifp/chart?edition=current'
-  headers = {'accept': 'application/json'}
-  r = requests.get(url, headers=headers, verify=False)
-  res = r.json()
+  # url = 'https://soa.smext.faa.gov/apra/cifp/chart?edition=current'
+  # headers = {'accept': 'application/json'}
+  # r = requests.get(url, headers=headers, verify=False)
+  # res = r.json()
 
-  for edition in res['edition']:
-    if edition['editionName'] == 'CURRENT':
-      url = edition['product']['url']
-      cycle = url.split('_')[-1][:4]
+  # for edition in res['edition']:
+  #   if edition['editionName'] == 'CURRENT':
+  #     url = edition['product']['url']
+  #     cycle = url.split('_')[-1][:4]
 
-      return url, cycle
+  #     return url, cycle
 
-  return None, None
+  url = 'https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/cifp/download/'
+  r = requests.get(url, verify=False)
+  soup = BeautifulSoup(r.text, 'html.parser')
+
+  # Get first link in the table
+  link = soup.find('table').find('a')
+  url = link['href']
+  cycle = link.text.split(' ')[-1]
+
+  return url, cycle
 
 
 def download_cifp(url):
