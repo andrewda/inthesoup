@@ -54,13 +54,15 @@ def get_current_cifp_cycle():
   #     return url, cycle
 
   url = 'https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/cifp/download/'
-  r = requests.get(url, verify=False)
+  r = requests.get(url)
   soup = BeautifulSoup(r.text, 'html.parser')
 
   # Get first link in the table
   link = soup.find('table').find('a')
   url = link['href']
-  cycle = link.text.split(' ')[-1]
+
+  # Remove day from cycle (last 2 characters)
+  cycle = link.text.split(' ')[-1][:-2]
 
   return url, cycle
 
@@ -145,6 +147,8 @@ def parse_cifp(file_path):
 
 if __name__ == '__main__':
   url, cycle = get_current_cifp_cycle()
+
+  print(f'Current CIFP cycle: {cycle}')
 
   file_path = download_cifp(url)
 
