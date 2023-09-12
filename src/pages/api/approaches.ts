@@ -68,6 +68,22 @@ ON
 WHERE
   wx.CIG != -88
   AND (wx.CIG * 100) <= (Filtered_FAF_Airport.Altitude - apt.Airport_Elevation)
+  AND wx.CIG >= @minCeiling
+  AND (
+    (
+      @startHour <= @endHour AND
+      EXTRACT(HOUR FROM wx.Time) >= @startHour AND
+      EXTRACT(HOUR FROM wx.Time) <= @endHour
+    )
+    OR
+    (
+      @startHour > @endHour AND
+      (
+        EXTRACT(HOUR FROM wx.Time) >= @startHour OR
+        EXTRACT(HOUR FROM wx.Time) <= @endHour
+      )
+    )
+  )
 GROUP BY wx.Time, apt.Airport_ICAO_Identifier
 ORDER BY
   ANY_VALUE(Filtered_FAF_Airport.Distance_NM) ASC,
@@ -174,6 +190,9 @@ export default async function handler(
 ) {
   const airport = req.query.airport as string;
   const radius = Number(req.query.radius);
+  const minCeiling = Number(req.query.minCeiling) || 0;
+  const startHour = Number(req.query.startHour) || 0;
+  const endHour = Number(req.query.endHour) || 23;
   const forecast = (Array.isArray(req.query.forecast) ? req.query.forecast[0] : req.query.forecast) ?? 'nbh';
 
   if (!airport || !radius) {
@@ -197,7 +216,7 @@ export default async function handler(
 
   const options = {
     query,
-    params: { airport, radius },
+    params: { airport, radius, minCeiling, startHour, endHour },
   };
 
   // Run the query

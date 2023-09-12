@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 function ApproachBadge(props: any) {
   const approach = props.approach;
   const approachName = approach.name;
@@ -51,14 +53,32 @@ function ApproachBadge(props: any) {
   }
 }
 
-export default function Table(props: { forecasts: any[] }) {
-  const forecasts = props.forecasts;
-
-  const localTime = true;
+function toLocalTime(time: string) {
   const localTimeOptions: Intl.DateTimeFormatOptions = {
     dateStyle: 'short',
     timeStyle: 'short',
-  }
+  };
+
+  return new Date(time).toLocaleString(undefined, localTimeOptions);
+}
+
+function toZuluTime(time: string) {
+  const date = new Date(time);
+
+  const month = (date.getUTCMonth() + 1).toString();
+  const day = date.getUTCDate().toString();
+  const year = date.getUTCFullYear().toString().slice(-2);
+  const hour = date.getUTCHours().toString().padStart(2, '0');
+  const minute = date.getUTCMinutes().toString().padStart(2, '0');
+
+  const formattedDate = `${month}/${day}/${year}, ${hour}${minute}Z`;
+  return formattedDate;
+}
+
+export default function Table(props: { forecasts: any[] }) {
+  const [localTime, setLocalTime] = useState(true);
+
+  const forecasts = props.forecasts;
 
   return (
     <div className="px-4 sm:px-6 lg:px-8">
@@ -66,8 +86,8 @@ export default function Table(props: { forecasts: any[] }) {
         <table className="min-w-full divide-y divide-gray-300">
           <thead>
             <tr>
-              <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0">
-                Time
+              <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-0 cursor-pointer" onClick={() => setLocalTime((localTime) => !localTime)}>
+                Time ({localTime ? 'Local' : 'Zulu'})
               </th>
               <th
                 scope="col"
@@ -96,7 +116,7 @@ export default function Table(props: { forecasts: any[] }) {
             {forecasts?.map((forecast) => (
               <tr key={forecast.airport.icao + forecast.time}>
                 <td className="w-44 py-4 pl-4 pr-3 text-sm font-medium text-gray-900 md:w-auto sm:pl-0">
-                  {localTime ? new Date(forecast.time).toLocaleString(undefined, localTimeOptions) : new Date(forecast.time).toUTCString().replace('GMT', 'UTC')}
+                  {localTime ? toLocalTime(forecast.time) : toZuluTime(forecast.time)}
                   <dl className="font-normal lg:hidden">
                     <dt className="sr-only">Airport</dt>
                     <dd className="mt-1 truncate text-gray-700">{forecast.airport.icao}</dd>
