@@ -112,6 +112,14 @@ def get_metar_data():
       if observation['properties']['id'] in metar_data.index:
         continue
 
+      # Remove "+" from visibility, if type is string
+      if 'visib' in observation['properties'] and isinstance(observation['properties']['visib'], str):
+        observation['properties']['visib'] = int(observation['properties']['visib'].replace('+', ''))
+
+      # Set wind direction to 0 if variable
+      if 'wdir' in observation['properties'] and observation['properties']['wdir'] == 'VRB':
+        observation['properties']['wdir'] = 0
+
       df = pd.DataFrame(index=[observation['properties']['id']])
 
       df['Location'] = [observation['properties']['id']]
@@ -214,8 +222,13 @@ def parse_noaa_data(data, fmt):
 if __name__ == '__main__':
   nbh = None
   nbs = None
+  metar = None
 
-  metar = get_metar_data()
+  try:
+    metar = get_metar_data()
+  except Exception as e:
+    print('Error getting METAR data. Skipping...')
+    print(e)
 
   # Retry up to 10 times with 60 second delay
   n_tries = 10
