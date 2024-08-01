@@ -1,13 +1,13 @@
 import { useState } from "react";
 
 const colorMap: Record<string, string> = {
-  'ILS': 'blue',
-  'RNAV': 'green',
-  'VOR': 'yellow',
-  'LOC': 'red',
-  'NDB': 'purple',
-  'GPS': 'indigo',
-  'LDA': 'pink',
+  'ILS': 'bg-blue-100',
+  'RNAV': 'bg-green-100',
+  'VOR': 'bg-yellow-100',
+  'LOC': 'bg-red-100',
+  'NDB': 'bg-purple-100',
+  'GPS': 'bg-indigo-100',
+  'LDA': 'bg-pink-100',
 };
 
 function ApproachBadge(props: any) {
@@ -18,7 +18,7 @@ function ApproachBadge(props: any) {
   // split by space and dash
   const type = approachName.split(/[\s-\/]/)[0];
 
-  const colorClass = `bg-${colorMap[type] ?? 'gray'}-100`;
+  const colorClass = colorMap[type] ?? 'bg-gray-100';
 
   const badge = (
     <span
