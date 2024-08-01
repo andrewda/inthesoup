@@ -1,41 +1,28 @@
 import { useState } from "react";
 
+const colorMap: Record<string, string> = {
+  'ILS': 'blue',
+  'RNAV': 'green',
+  'VOR': 'yellow',
+  'LOC': 'red',
+  'NDB': 'purple',
+  'GPS': 'indigo',
+  'LDA': 'pink',
+};
+
 function ApproachBadge(props: any) {
   const approach = props.approach;
-  const approachName = approach.name;
-  const approachChart = approach.chart;
+  const approachName: string = approach.name;
+  const approachChart: string = approach.chart;
 
   // split by space and dash
   const type = approachName.split(/[\s-\/]/)[0];
 
-  let color = 'bg-gray-100';
-  switch (type) {
-    case 'ILS':
-      color = 'bg-blue-100';
-      break;
-    case 'RNAV':
-      color = 'bg-green-100';
-      break;
-    case 'VOR':
-      color = 'bg-yellow-100';
-      break;
-    case 'LOC':
-      color = 'bg-red-100';
-      break;
-    case 'NDB':
-      color = 'bg-purple-100';
-      break;
-    case 'GPS':
-      color = 'bg-indigo-100';
-      break;
-    case 'LDA':
-      color = 'bg-pink-100';
-      break;
-  }
+  const colorClass = `bg-${colorMap[type] ?? 'gray'}-100`;
 
   const badge = (
     <span
-      className={`inline-flex items-center rounded-full ${color} px-2.5 py-0.5 m-0.5 text-xs font-medium text-gray-800`}
+      className={`inline-flex items-center rounded-full ${colorClass} px-2.5 py-0.5 m-0.5 text-xs font-medium text-gray-800`}
       title={`FAF MSL: ${approach.faf.msl} ft, AGL: ${approach.faf.agl} ft`}
     >
       {approachName}
@@ -44,7 +31,7 @@ function ApproachBadge(props: any) {
 
   if (approachChart) {
     return (
-      <a href={`https://aeronav.faa.gov/d-tpp/${approachChart}`} target="_blank">
+      <a href={`https://aeronav.faa.gov/d-tpp/${approachChart}`} target="_blank" className="hover:brightness-95 active:brightness-90">
         {badge}
       </a>
     )
