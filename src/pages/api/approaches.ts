@@ -205,14 +205,22 @@ export default async function handler(
     return;
   }
 
-  const validForecastTypes = ['metar', 'nbh', 'nbs'];
+  const validForecastTypes = ['metar', 'nbm', 'nbh', 'nbs'];
   if (!validForecastTypes.includes(forecast)) {
-    res.status(400).json({ error: 'Forecast must be METAR, NBH or NBS' });
+    res.status(400).json({ error: 'Forecast must be METAR or NBM' });
     return;
   }
 
-  // Use NBH for 24hr forecast, NBS for 72hr forecast
-  const query = baseQuery.replace('[FORECAST_TYPE]', forecast)
+  // For NBM, combine both NBH and NBS data sources
+  let query: string;
+  if (forecast === 'nbm') {
+    query = baseQuery.replace(
+      '`inthesoup.weather.[FORECAST_TYPE]`',
+      '(\n    SELECT * FROM `inthesoup.weather.nbh`\n    UNION ALL\n    SELECT * FROM `inthesoup.weather.nbs`\n  )'
+    );
+  } else {
+    query = baseQuery.replace('[FORECAST_TYPE]', forecast);
+  }
 
   const options = {
     query,

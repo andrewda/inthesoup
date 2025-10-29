@@ -126,8 +126,7 @@ export default function Home() {
                       onChange={(e) => setForecast(e.target.value)}
                     >
                       <option value="metar">METAR (current)</option>
-                      <option value="nbh">NBH (24hr, 1hr period)</option>
-                      <option value="nbs">NBS (72hr, 3hr period)</option>
+                      <option value="nbm">NBM Forecast (72hr)</option>
                     </select>
                   </div>
                 </div>
