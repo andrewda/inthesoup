@@ -97,46 +97,53 @@ def get_metar_data():
   for bbox in bboxes:
     print(f'Getting METAR data for bbox {bbox}...')
 
-    res = requests.get(f'https://www.aviationweather.gov/cgi-bin/json/MetarJSON.php?taf=true&density=all&bbox={bbox}')
+    # Use the new Aviation Weather Center API
+    res = requests.get(f'https://aviationweather.gov/api/data/metar?bbox={bbox}&format=json&taf=true')
 
     if res.status_code != 200:
       print(f'Error getting METAR data for bbox {bbox}')
       continue
 
+    # The new API returns an array directly, not a GeoJSON features collection
     data = res.json()
 
-    for observation in data['features']:
-      if 'id' not in observation['properties']:
+    # The new API returns a list of observations
+    if not isinstance(data, list):
+      print(f'Unexpected response format for bbox {bbox}')
+      continue
+
+    for observation in data:
+      if 'icaoId' not in observation:
         continue
 
-      if observation['properties']['id'] in metar_data.index:
+      if observation['icaoId'] in metar_data.index:
         continue
 
       # Remove "+" from visibility, if type is string
-      if 'visib' in observation['properties'] and isinstance(observation['properties']['visib'], str):
-        observation['properties']['visib'] = int(observation['properties']['visib'].replace('+', ''))
+      if 'visib' in observation and isinstance(observation['visib'], str):
+        observation['visib'] = int(observation['visib'].replace('+', ''))
 
       # Set wind direction to 0 if variable
-      if 'wdir' in observation['properties'] and observation['properties']['wdir'] == 'VRB':
-        observation['properties']['wdir'] = 0
+      if 'wdir' in observation and observation['wdir'] == 'VRB':
+        observation['wdir'] = 0
 
-      df = pd.DataFrame(index=[observation['properties']['id']])
+      df = pd.DataFrame(index=[observation['icaoId']])
 
-      df['Location'] = [observation['properties']['id']]
-      df['Time'] = [datetime.strptime(observation['properties']['obsTime'], '%Y-%m-%dT%H:%M:%SZ')]
-      df['Forecast_Time'] = [datetime.strptime(observation['properties']['obsTime'], '%Y-%m-%dT%H:%M:%SZ')]
+      df['Location'] = [observation['icaoId']]
+      df['Time'] = [datetime.strptime(observation['obsTime'], '%Y-%m-%dT%H:%M:%SZ')]
+      df['Forecast_Time'] = [datetime.strptime(observation['obsTime'], '%Y-%m-%dT%H:%M:%SZ')]
 
-      df['TMP'] = [c_to_f(observation['properties']['temp']) if 'temp' in observation['properties'] else None]
-      df['DPT'] = [c_to_f(observation['properties']['dewp']) if 'dewp' in observation['properties'] else None]
-      df['WDR'] = [observation['properties']['wdir'] / 10 if 'wdir' in observation['properties'] else None]
-      df['WSP'] = [observation['properties']['wspd'] if 'wspd' in observation['properties'] else None]
-      df['CIG'] = [observation['properties']['ceil'] if 'ceil' in observation['properties'] else None]
-      df['LCB'] = [int(observation['properties']['cldBas1']) if 'cldBas1' in observation['properties'] else None]
-      df['VIS'] = [sm_to_km(observation['properties']['visib']) * 10 if 'visib' in observation['properties'] else None]
+      df['TMP'] = [c_to_f(observation['temp']) if 'temp' in observation else None]
+      df['DPT'] = [c_to_f(observation['dewp']) if 'dewp' in observation else None]
+      df['WDR'] = [observation['wdir'] / 10 if 'wdir' in observation else None]
+      df['WSP'] = [observation['wspd'] if 'wspd' in observation else None]
+      df['CIG'] = [observation['ceil'] if 'ceil' in observation else None]
+      df['LCB'] = [int(observation['cldBas1']) if 'cldBas1' in observation else None]
+      df['VIS'] = [sm_to_km(observation['visib']) * 10 if 'visib' in observation else None]
       df['IFC'] = [None]
 
-      df['METAR'] = [observation['properties']['rawOb']]
-      df['TAF'] = [observation['properties']['rawTaf'] if 'rawTaf' in observation['properties'] else None]
+      df['METAR'] = [observation['rawOb']]
+      df['TAF'] = [observation['rawTaf'] if 'rawTaf' in observation else None]
 
       metar_data = pd.concat([metar_data, df])
 
