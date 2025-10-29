@@ -1,5 +1,5 @@
 env: standard
-runtime: nodejs18
+runtime: nodejs24
 service: default
 handlers:
   - url: /.*
