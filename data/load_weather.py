@@ -129,6 +129,12 @@ def get_metar_data():
       if 'wdir' in observation and observation['wdir'] == 'VRB':
         observation['wdir'] = 0
 
+      cloudBases = list(filter(lambda c: c['cover'] == 'SCT' or c['cover'] == 'BKN' or c['cover'] == 'OVC', observation.get('clouds', [])))
+      lowestCloudBase = min([c['base'] for c in cloudBases]) if len(cloudBases) > 0 else None
+
+      ceilings = list(filter(lambda c: c['cover'] == 'BKN' or c['cover'] == 'OVC', observation.get('clouds', [])))
+      lowestCeiling = min([c['base'] for c in ceilings]) if len(ceilings) > 0 else None
+
       df = pd.DataFrame(index=[observation['icaoId']])
 
       df['Location'] = [observation['icaoId']]
@@ -139,8 +145,8 @@ def get_metar_data():
       df['DPT'] = [c_to_f(observation['dewp']) if 'dewp' in observation else None]
       df['WDR'] = [observation['wdir'] / 10 if 'wdir' in observation else None]
       df['WSP'] = [observation['wspd'] if 'wspd' in observation else None]
-      df['CIG'] = [observation['ceil'] if 'ceil' in observation else None]
-      df['LCB'] = [int(observation['cldBas1']) if 'cldBas1' in observation else None]
+      df['CIG'] = [lowestCeiling]
+      df['LCB'] = [lowestCloudBase]
       df['VIS'] = [sm_to_km(observation['visib']) * 10 if 'visib' in observation else None]
       df['IFC'] = [None]
 
