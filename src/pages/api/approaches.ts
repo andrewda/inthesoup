@@ -205,9 +205,9 @@ export default async function handler(
     return;
   }
 
-  const validForecastTypes = ['metar', 'nbh', 'nbs'];
+  const validForecastTypes = ['metar', 'taf', 'nbh', 'nbs'];
   if (!validForecastTypes.includes(forecast)) {
-    res.status(400).json({ error: 'Forecast must be METAR, NBH or NBS' });
+    res.status(400).json({ error: 'Forecast must be METAR, TAF, NBH or NBS' });
     return;
   }
 
