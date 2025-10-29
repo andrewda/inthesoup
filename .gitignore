@@ -41,3 +41,8 @@ CIFP_*.zip
 
 # Data CSVs
 data/*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
