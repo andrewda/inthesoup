@@ -6,3 +6,4 @@ pandas-gbq==0.23.1
 requests==2.28.2
 tqdm==4.64.1
 beautifulsoup4==4.11.2
+pytest==8.3.3

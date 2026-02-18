@@ -35,6 +35,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# python
+*.pyc
+*.pyd
+__pycache__/
+
 # CIFP files
 CIFP_*
 CIFP_*.zip

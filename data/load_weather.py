@@ -87,13 +87,17 @@ def get_metar_data():
   """
 
   # We must split the US into 3 regions to get all the data
+  # Format: minLat,minLon,maxLat,maxLon
   bboxes = [
-    '28.524736,-125.771484,49.322923,-102.744141', # Western US
-    '25.536738,-103.350588,49.371110,-86.695315', # Central US
-    '23.992635,-87.099609,49.408788,-63.193359', # Eastern US
+    '25.0,-125.0,50.0,-103.0',     # Western US (Pacific to Rockies)
+    '25.0,-103.0,50.0,-87.0',      # Central US (Rockies to Mississippi)
+    '25.0,-87.0,50.0,-65.0',       # Eastern US (Mississippi to Atlantic)
   ]
 
-  metar_data = pd.DataFrame()
+  # Collect rows in a list to avoid FutureWarning
+  rows = []
+  seen_locations = set()
+
   for bbox in bboxes:
     print(f'Getting METAR data for bbox {bbox}...')
 
@@ -116,8 +120,9 @@ def get_metar_data():
       if 'icaoId' not in observation:
         continue
 
-      if observation['icaoId'] in metar_data.index:
+      if observation['icaoId'] in seen_locations:
         continue
+      seen_locations.add(observation['icaoId'])
 
       # Remove "+" from visibility, if type is string
       if 'visib' in observation and isinstance(observation['visib'], str) and observation['visib'] != '':
@@ -135,40 +140,27 @@ def get_metar_data():
       ceilings = list(filter(lambda c: c['cover'] == 'BKN' or c['cover'] == 'OVC', observation.get('clouds', [])))
       lowestCeiling = min([c['base'] for c in ceilings]) if len(ceilings) > 0 else None
 
-      df = pd.DataFrame(index=[observation['icaoId']])
+      rows.append({
+        'Location': observation['icaoId'],
+        'Time': datetime.strptime(observation['reportTime'], '%Y-%m-%dT%H:%M:%S.%fZ'),
+        'Forecast_Time': datetime.strptime(observation['reportTime'], '%Y-%m-%dT%H:%M:%S.%fZ'),
+        'TMP': c_to_f(observation['temp']) if 'temp' in observation else None,
+        'DPT': c_to_f(observation['dewp']) if 'dewp' in observation else None,
+        'WDR': observation['wdir'] / 10 if 'wdir' in observation else None,
+        'WSP': observation['wspd'] if 'wspd' in observation else None,
+        'CIG': lowestCeiling,
+        'LCB': lowestCloudBase,
+        'VIS': sm_to_km(observation['visib']) * 10 if 'visib' in observation else None,
+        'IFC': None,
+        'METAR': observation['rawOb'],
+        'TAF': observation['rawTaf'] if 'rawTaf' in observation else None,
+      })
 
-      df['Location'] = [observation['icaoId']]
-      df['Time'] = [datetime.strptime(observation['reportTime'], '%Y-%m-%dT%H:%M:%S.%fZ')]
-      df['Forecast_Time'] = [datetime.strptime(observation['reportTime'], '%Y-%m-%dT%H:%M:%S.%fZ')]
-
-      df['TMP'] = [c_to_f(observation['temp']) if 'temp' in observation else None]
-      df['DPT'] = [c_to_f(observation['dewp']) if 'dewp' in observation else None]
-      df['WDR'] = [observation['wdir'] / 10 if 'wdir' in observation else None]
-      df['WSP'] = [observation['wspd'] if 'wspd' in observation else None]
-      df['CIG'] = [lowestCeiling]
-      df['LCB'] = [lowestCloudBase]
-      df['VIS'] = [sm_to_km(observation['visib']) * 10 if 'visib' in observation else None]
-      df['IFC'] = [None]
-
-      df['METAR'] = [observation['rawOb']]
-      df['TAF'] = [observation['rawTaf'] if 'rawTaf' in observation else None]
-
-      metar_data = pd.concat([metar_data, df])
-
-  # set column types
-  metar_data['Location'] = metar_data['Location'].astype('category')
-  metar_data['Time'] = pd.to_datetime(metar_data['Time'])
-  metar_data['Forecast_Time'] = pd.to_datetime(metar_data['Forecast_Time'])
-  metar_data['TMP'] = metar_data['TMP'].astype('float')
-  metar_data['DPT'] = metar_data['DPT'].astype('float')
-  metar_data['WDR'] = metar_data['WDR'].astype('float')
-  metar_data['WSP'] = metar_data['WSP'].astype('float')
-  metar_data['CIG'] = metar_data['CIG'].astype('float')
-  metar_data['LCB'] = metar_data['LCB'].astype('float')
-  metar_data['VIS'] = metar_data['VIS'].astype('float')
-  metar_data['IFC'] = metar_data['IFC'].astype('float')
-  metar_data['METAR'] = metar_data['METAR'].astype('str')
-  metar_data['TAF'] = metar_data['TAF'].astype('str')
+  # Create DataFrame from rows list
+  if rows:
+    metar_data = pd.DataFrame(rows)
+  else:
+    metar_data = pd.DataFrame(columns=['Location', 'Time', 'Forecast_Time', 'TMP', 'DPT', 'WDR', 'WSP', 'CIG', 'LCB', 'VIS', 'IFC', 'METAR', 'TAF'])
 
   return metar_data
 
