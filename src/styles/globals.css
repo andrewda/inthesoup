@@ -2,11 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased transition-colors duration-300;
+  }
+
+  .dark body {
+    @apply bg-slate-900 text-slate-200;
+  }
+}
+
+@layer components {
+  .input-field {
+    @apply block w-full rounded-lg border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-sky-500 sm:text-sm sm:leading-6 transition-all duration-200 bg-white;
+  }
+
+  .input-field:hover {
+    @apply ring-slate-300;
+  }
+
+  .dark .input-field {
+    @apply bg-slate-800 text-white ring-slate-700 placeholder:text-slate-500;
+  }
+
+  .dark .input-field:hover {
+    @apply ring-slate-600;
+  }
+
+  .select-field {
+    @apply block w-full rounded-lg border-0 py-2.5 pl-4 pr-10 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 focus:ring-2 focus:ring-inset focus:ring-sky-500 sm:text-sm sm:leading-6 transition-all duration-200 appearance-none bg-white;
+  }
+
+  .dark .select-field {
+    @apply bg-slate-800 text-white ring-slate-700;
+  }
+
+  .btn-primary {
+    @apply w-full rounded-lg bg-sky-600 py-2.5 px-4 text-sm font-semibold text-white shadow-sm hover:bg-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary:hover {
+    @apply bg-sky-500;
+  }
+
+  .dark .btn-primary {
+    @apply bg-sky-500 hover:bg-sky-400;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center text-sm font-medium text-sky-600 hover:text-sky-500 transition-colors duration-200;
+  }
+
+  .dark .btn-secondary {
+    @apply text-sky-400 hover:text-sky-300;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-card border border-slate-100 overflow-hidden transition-colors duration-300;
+  }
+
+  .dark .card {
+    @apply bg-slate-800 border-slate-700 shadow-card-dark;
+  }
+}
+
 select {
   -webkit-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 0.5rem center;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.75rem center;
   background-repeat: no-repeat;
-  background-size: 1.5em 1.5em;
+  background-size: 1.25em 1.25em;
+}
+
+.dark select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2394a3b8' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100 rounded-full;
+}
+
+.dark ::-webkit-scrollbar-track {
+  @apply bg-slate-800;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-slate-600 hover:bg-slate-500;
 }

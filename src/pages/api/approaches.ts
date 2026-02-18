@@ -1,7 +1,7 @@
 import { BigQuery } from '@google-cloud/bigquery';
 import { NextApiRequest, NextApiResponse } from 'next';
 
-const bigquery = new BigQuery();
+const bigquery = new BigQuery({ projectId: 'inthesoup' });
 
 const baseQuery = `WITH
   NearAirport AS (
