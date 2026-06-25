@@ -159,6 +159,7 @@ def get_metar_data():
   # Create DataFrame from rows list
   if rows:
     metar_data = pd.DataFrame(rows)
+    metar_data['IFC'] = metar_data['IFC'].astype('float64')
   else:
     metar_data = pd.DataFrame(columns=['Location', 'Time', 'Forecast_Time', 'TMP', 'DPT', 'WDR', 'WSP', 'CIG', 'LCB', 'VIS', 'IFC', 'METAR', 'TAF'])
 
