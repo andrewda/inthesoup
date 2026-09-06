@@ -1,0 +1,7 @@
+SUSAP 09J K7A09J     0     037YHN31042810W081254000W005000011         1800018000C    MNAR    JEKYLL ISLAND                 805550913
+SUSAP 09J K7FVOR-A S      010SAUSEK7PC0E  I    IF SSI K7      21710070        D   + 01600     18000                 0 NC   805751612
+SUSAP 09J K7FVOR-A S      020SSI  K7D 0V  F    CF SSI K7      0000000003710070D   + 01000                 SSI   K7D 0 NC   805761612
+SUSAP 09J K7FVOR-A S      030MAVNKK7PC0EY M    CF SSI K7      0371001503710015D     00011              000          0 NC   805772204
+SUSAP 09J K7FVOR-A S      040         0  M     CA                     0371        + 00411                           0 NC   805781612
+SUSAP 09J K7FVOR-A S      050SSI  K7D 0VY  R   DF                                 + 02000                           0 NC   805791612
+SUSAP 09J K7FVOR-A S      060SSI  K7D 0VE  R   HM                     0371T010    + 02000                           0 NC   805801612

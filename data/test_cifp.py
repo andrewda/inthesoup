@@ -101,6 +101,17 @@ def test_parsed_charts_merge_into_approaches(mock_get):
     assert merged.PDF_Name.tolist() == ['2609/00001IL17.PDF', '2609/00001R35.PDF', None]
 
 
+def test_fap_extracted_for_approaches_without_faf():
+    # 09J VOR-A has no FAF; the on-airport VOR (SSI) is coded as the FAP ('V  F').
+    fixture = os.path.join(os.path.dirname(__file__), 'fixtures', 'fap_vor_a.txt')
+    airports, faf = load_cifp.parse_cifp(fixture)
+    assert airports['Airport ICAO Identifier'].tolist() == ['09J']
+    assert faf['SID/STAR/Approach Identifier'].tolist() == ['VOR-A']
+    assert faf['Fix Identifier'].tolist() == ['SSI']
+    assert faf['Waypoint Description Code'].tolist() == ['V  F']
+    assert faf.Altitude.tolist() == ['01000']
+
+
 @pytest.mark.parametrize('function,args', [(load_cifp.get_current_cifp_cycle, ()),
                                           (load_cifp.download_cifp, ('https://example.test/cifp.zip',))])
 @patch('load_cifp.requests.get')

@@ -124,7 +124,9 @@ def parse_cifp(file_path):
         is_apt = True
         break
 
-      if f.name == 'Waypoint Description Code' and f.value == 'E  F':
+      # 'F' in the fourth Waypoint Description Code character marks the FAF
+      # (e.g. 'E  F') or, for approaches without a FAF, the FAP (e.g. 'V  F').
+      if f.name == 'Waypoint Description Code' and f.value[3] == 'F':
         is_faf = True
         break
 
