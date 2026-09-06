@@ -10,6 +10,7 @@ jobs:
   load-weather:
     name: Load Weather Forecasts
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v2
       - name: Authenticate to Google Cloud
@@ -19,4 +20,4 @@ jobs:
       - name: Install dependencies
         run: pip3 install -r data/requirements.txt
       - name: Load weather data
-        run: python3 data/load_weather.py
+        run: python3 -u data/load_weather.py

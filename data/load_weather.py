@@ -2,10 +2,15 @@
 Loads weather data from NOAA and uploads it to BigQuery.
 """
 
+import argparse
+import gzip
+import re
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
-from ftplib import FTP
-from io import StringIO
+from fractions import Fraction
+
+from bs4 import BeautifulSoup
 
 import google.auth
 import pandas as pd
@@ -13,7 +18,35 @@ import pandas_gbq
 import requests
 from tqdm import tqdm
 
-credentials, project = google.auth.default()
+HTTP_TIMEOUT = (10, 60)  # Connect and read timeouts, in seconds.
+NOAA_URL = 'https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/prod/'
+CACHE_URL = 'https://aviationweather.gov/data/cache/'
+NUMERIC_METAR_COLUMNS = ['TMP', 'DPT', 'WDR', 'WSP', 'CIG', 'LCB', 'VIS', 'IFC']
+
+
+def fetch(url):
+  """Retry transient HTTP failures, with bounded waits and no final sleep."""
+  for attempt in range(3):
+    try:
+      response = requests.get(
+        url, timeout=HTTP_TIMEOUT,
+        headers={'User-Agent': 'InTheSoup/1.0 (https://inthesoup.xyz)'},
+      )
+      response.raise_for_status()
+      return response
+    except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as error:
+      status = error.response.status_code if error.response is not None else None
+      if attempt == 2 or (status is not None and status != 429 and status < 500):
+        raise
+      delay = 2 ** (attempt + 1)
+      print(f'Download failed: {url}: {error}; retrying in {delay}s', flush=True)
+      time.sleep(delay)
+
+
+def directory_entries(url, pattern):
+  response = fetch(url)
+  links = BeautifulSoup(response.text, 'html.parser').find_all('a', href=True)
+  return sorted({link['href'] for link in links if re.fullmatch(pattern, link['href'])}, reverse=True)
 
 
 def c_to_f(c):
@@ -44,125 +77,117 @@ def round_to_nearest_10(x):
 
 
 def get_noaa_data():
-  """Get weather data from NOAA.
-  @return: Tuple of (nbh, nbs) where nbh is the weather data for the next 24 hours
-  and nbs is the weather data for the next 72 hours (in 3hr increments).
-  """
+  """Download NBH and NBS from the newest complete NOAA HTTPS cycle."""
+  days = directory_entries(NOAA_URL, r'blend\.\d{8}/')
+  checked = 0
+  for day in days[:2]:
+    hours = directory_entries(NOAA_URL + day, r'(?:[01]\d|2[0-3])/')
+    for hour in hours:
+      # New cycles appear before all text products have finished publishing.
+      checked += 1
+      if checked > 6:
+        raise RuntimeError('No complete NBH/NBS pair in the latest six NOAA cycles')
+      text_url = NOAA_URL + day + hour + 'text/'
+      try:
+        files = directory_entries(text_url, r'blend_nb[hs]tx\.t\d{2}z')
+        names = [f'blend_{fmt}tx.t{hour[:2]}z' for fmt in ('nbh', 'nbs')]
+        if not all(name in files for name in names):
+          continue
+        print(f'Downloading NOAA cycle {day}{hour}', flush=True)
+        products = tuple(fetch(text_url + name).text for name in names)
+        if any(not product.strip() or '<html' in product.lower() for product in products):
+          raise ValueError('NOAA returned an empty or HTML forecast product')
+        return products
+      except requests.HTTPError as error:
+        if error.response.status_code != 404:
+          raise
+  raise RuntimeError('No complete NBH/NBS pair found on NOAA')
 
-  print('Accessing NOAA FTP server...')
 
-  ftp = FTP('ftp.ncep.noaa.gov')
-  ftp.login()
+def number(value):
+  """Parse optional weather numbers, including fractional and 10+ visibility."""
+  if value is None or str(value).strip() == '':
+    return None
+  try:
+    return float(Fraction(str(value).strip().rstrip('+')))
+  except (ValueError, ZeroDivisionError):
+    return None
 
-  ftp.cwd('/pub/data/nccf/com/blend/prod')
 
-  # Get forecast days
-  forecast_days = ftp.nlst()
-  forecast_day = forecast_days[-1]
-  ftp.cwd(forecast_day)
-
-  # Get forecast hours
-  forecast_hours = ftp.nlst()
-  forecast_hour = forecast_hours[-1]
-
-  print(f'Downloading NBH forecast {forecast_day} {forecast_hour}Z...')
-
-  nbh_str = StringIO()
-  ftp.retrlines('RETR {time}/text/blend_nbhtx.t{time}z'.format(time=forecast_hour), lambda line: nbh_str.write(line + '\n'))
-  nbh = nbh_str.getvalue()
-  nbh_str.close()
-
-  print(f'Downloading NBS forecast {forecast_day} {forecast_hour}Z...')
-
-  nbs_str = StringIO()
-  ftp.retrlines('RETR {time}/text/blend_nbstx.t{time}z'.format(time=forecast_hour), lambda line: nbs_str.write(line + '\n'))
-  nbs = nbs_str.getvalue()
-  nbs_str.close()
-
-  return nbh, nbs
+def read_cache(name, tag):
+  response = fetch(CACHE_URL + name + '.cache.xml.gz')
+  root = ET.fromstring(gzip.decompress(response.content))
+  records = root.findall(f'./data/{tag}')
+  if not records:
+    raise ValueError(f'Empty {name} weather cache')
+  return records
 
 
 def get_metar_data():
-  """Get METAR data from aviationweather.gov.
+  """Read complete AWC caches, retaining the existing continental-US bounds.
+
+  The query API truncates large requests; bulk caches avoid missing stations.
+  Cache cloud heights are feet AGL; shared forecast tables use hundreds of feet.
   """
+  observations = read_cache('metars', 'METAR')
+  tafs = {}
+  for taf in read_cache('tafs', 'TAF'):
+    station = taf.findtext('station_id')
+    issued = taf.findtext('issue_time', '')
+    if station not in tafs or issued > tafs[station][0]:
+      tafs[station] = (issued, taf.findtext('raw_text'))
 
-  # We must split the US into 3 regions to get all the data
-  # Format: minLat,minLon,maxLat,maxLon
-  bboxes = [
-    '25.0,-125.0,50.0,-103.0',     # Western US (Pacific to Rockies)
-    '25.0,-103.0,50.0,-87.0',      # Central US (Rockies to Mississippi)
-    '25.0,-87.0,50.0,-65.0',       # Eastern US (Mississippi to Atlantic)
-  ]
-
-  # Collect rows in a list to avoid FutureWarning
   rows = []
-  seen_locations = set()
-
-  for bbox in bboxes:
-    print(f'Getting METAR data for bbox {bbox}...')
-
-    # Use the new Aviation Weather Center API
-    res = requests.get(f'https://aviationweather.gov/api/data/metar?bbox={bbox}&format=json&taf=true')
-
-    if res.status_code > 400:
-      print(f'Error getting METAR data for bbox {bbox}')
+  for observation in observations:
+    station = observation.findtext('station_id')
+    lat = number(observation.findtext('latitude'))
+    lon = number(observation.findtext('longitude'))
+    if not station or lat is None or lon is None or not (25 <= lat <= 50 and -125 <= lon <= -65):
       continue
-
-    # The new API returns an array directly, not a GeoJSON features collection
-    data = res.json()
-
-    # The new API returns a list of observations
-    if not isinstance(data, list):
-      print(f'Unexpected response format for bbox {bbox}')
-      continue
-
-    for observation in data:
-      if 'icaoId' not in observation:
-        continue
-
-      if observation['icaoId'] in seen_locations:
-        continue
-      seen_locations.add(observation['icaoId'])
-
-      # Remove "+" from visibility, if type is string
-      if 'visib' in observation and isinstance(observation['visib'], str) and observation['visib'] != '':
-        observation['visib'] = int(observation['visib'].replace('+', ''))
-      else:
-        del observation['visib']
-
-      # Set wind direction to 0 if variable
-      if 'wdir' in observation and observation['wdir'] == 'VRB':
-        observation['wdir'] = 0
-
-      cloudBases = list(filter(lambda c: c['cover'] == 'SCT' or c['cover'] == 'BKN' or c['cover'] == 'OVC', observation.get('clouds', [])))
-      lowestCloudBase = min([c['base'] for c in cloudBases]) if len(cloudBases) > 0 else None
-
-      ceilings = list(filter(lambda c: c['cover'] == 'BKN' or c['cover'] == 'OVC', observation.get('clouds', [])))
-      lowestCeiling = min([c['base'] for c in ceilings]) if len(ceilings) > 0 else None
-
-      rows.append({
-        'Location': observation['icaoId'],
-        'Time': datetime.strptime(observation['reportTime'], '%Y-%m-%dT%H:%M:%S.%fZ'),
-        'Forecast_Time': datetime.strptime(observation['reportTime'], '%Y-%m-%dT%H:%M:%S.%fZ'),
-        'TMP': c_to_f(observation['temp']) if 'temp' in observation else None,
-        'DPT': c_to_f(observation['dewp']) if 'dewp' in observation else None,
-        'WDR': observation['wdir'] / 10 if 'wdir' in observation else None,
-        'WSP': observation['wspd'] if 'wspd' in observation else None,
-        'CIG': lowestCeiling,
-        'LCB': lowestCloudBase,
-        'VIS': sm_to_km(observation['visib']) * 10 if 'visib' in observation else None,
-        'IFC': None,
-        'METAR': observation['rawOb'],
-        'TAF': observation['rawTaf'] if 'rawTaf' in observation else None,
-      })
-
-  # Create DataFrame from rows list
-  if rows:
-    metar_data = pd.DataFrame(rows)
-    metar_data['IFC'] = metar_data['IFC'].astype('float64')
-  else:
-    metar_data = pd.DataFrame(columns=['Location', 'Time', 'Forecast_Time', 'TMP', 'DPT', 'WDR', 'WSP', 'CIG', 'LCB', 'VIS', 'IFC', 'METAR', 'TAF'])
-
+    timestamp = observation.findtext('observation_time')
+    raw = observation.findtext('raw_text')
+    if not timestamp or not raw:
+      raise ValueError(f'Missing observation time or METAR text for {station}')
+    reported = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    temperature = number(observation.findtext('temp_c'))
+    dewpoint = number(observation.findtext('dewpoint_c'))
+    direction_text = observation.findtext('wind_dir_degrees')
+    direction = 0 if direction_text == 'VRB' else number(direction_text)
+    visibility = number(observation.findtext('visibility_statute_mi'))
+    cloud_bases = []
+    ceilings = []
+    for cloud in observation.findall('sky_condition'):
+      base = number(cloud.get('cloud_base_ft_agl'))
+      cover = cloud.get('sky_cover')
+      if base is not None and cover in ('SCT', 'BKN', 'OVC', 'VV'):
+        cloud_bases.append(base)
+        if cover in ('BKN', 'OVC', 'VV'):
+          ceilings.append(base)
+    vertical_visibility = number(observation.findtext('vert_vis_ft'))
+    if vertical_visibility is not None:
+      ceilings.append(vertical_visibility)
+      cloud_bases.append(vertical_visibility)
+    rows.append({
+      'Location': station,
+      'Time': reported,
+      'Forecast_Time': reported,
+      'TMP': c_to_f(temperature) if temperature is not None else None,
+      'DPT': c_to_f(dewpoint) if dewpoint is not None else None,
+      'WDR': direction / 10 if direction is not None else None,
+      'WSP': number(observation.findtext('wind_speed_kt')),
+      'CIG': min(ceilings) / 100 if ceilings else None,
+      'LCB': min(cloud_bases) / 100 if cloud_bases else None,
+      'VIS': sm_to_km(visibility) * 10 if visibility is not None else None,
+      'IFC': None,
+      'METAR': raw,
+      'TAF': tafs.get(station, (None, None))[1],
+    })
+  if not rows:
+    raise ValueError('No METAR observations within the configured US bounds')
+  metar_data = pd.DataFrame(rows).sort_values('Time', ascending=False)
+  metar_data = metar_data.drop_duplicates('Location').reset_index(drop=True)
+  # Explicit numeric dtypes also cover entirely missing optional fields.
+  metar_data[NUMERIC_METAR_COLUMNS] = metar_data[NUMERIC_METAR_COLUMNS].astype('float64')
   return metar_data
 
 
@@ -173,116 +198,94 @@ def parse_noaa_data(data, fmt):
   @return: A pandas DataFrame containing the weather data
   """
 
-  location = data.strip().split('\n')[0].split(' ')[0]
+  if fmt not in ('nbh', 'nbs'):
+    raise ValueError(f'Unsupported forecast format: {fmt}')
+  lines = data.strip().splitlines()
+  header = lines[0].split()
+  location = header[0]
+  forecast_date = datetime.strptime(' '.join(header[-3:]), '%m/%d/%Y %H%M %Z')
+  fields = {line[:5].strip(): line[5:] for line in lines[1:]
+            if re.match(r'^ [A-Z][A-Z0-9]{1,2} ', line) and line[:5].strip() != 'DT'}
+  if 'UTC' not in fields:
+    raise ValueError(f'Missing UTC hours for {location}')
+  hours = [int(hour) for hour in fields['UTC'].split()]
+  if not hours or any(hour < 0 or hour > 23 for hour in hours):
+    raise ValueError(f'Invalid UTC hours for {location}')
 
-  forecast_date = None
-  if fmt == 'nbh':
-    forecast_date_str = data.strip().split('\n')[0].strip().split(' ')
-    forecast_date_str = list(filter(len, forecast_date_str))[-3:]
-    forecast_date_str = ' '.join(forecast_date_str)
-    forecast_date = datetime.strptime(forecast_date_str, '%m/%d/%Y %H%M %Z')
-    first_date = forecast_date + timedelta(hours=1)
-  elif fmt == 'nbs':
-    forecast_date_str = data.strip().split('\n')[0].strip().split(' ')
-    forecast_date_str = list(filter(len, forecast_date_str))[-3:]
-    forecast_date_str = ' '.join(forecast_date_str)
-    utc_hour = int(forecast_date_str[-8:-6])
-    forecast_date = datetime.strptime(forecast_date_str, '%m/%d/%Y %H%M %Z')
-    first_date = forecast_date + timedelta(hours=6 - (utc_hour % 3))
-
-  skip_lines = 1 if fmt == 'nbh' else 2
-
-  lines = data.strip().split('\n')[skip_lines:]
+  # UTC defines the column count. Trailing spaces and longer annotation lines
+  # must not introduce an extra all-null column or turn hours into floats.
   parsed_data = {}
-
-  max_len = max([len(line) for line in lines])
-  for line in lines:
-    var_name = line[:5].strip()
-    value_str = line[5:]
-
-    # Split the values into a list of integers every 3 characters
-    values = [int(value_str[i:i+3].strip()) if value_str[i:i+3].strip().lstrip('-').isdigit() else None for i in range(0, max_len - 5, 3)]
-
-    parsed_data[var_name] = values
-
+  for name, values in fields.items():
+    parsed_data[name] = [int(value) if value.lstrip('-').isdigit() else None
+                         for value in (values[i * 3:i * 3 + 3].strip() for i in range(len(hours)))]
+  parsed_data['UTC'] = hours
   df = pd.DataFrame(parsed_data)
   df['Location'] = location
   df['Forecast_Time'] = forecast_date
 
-  date = first_date
   dates = []
-
-  prev_hr = None
-  for hr in df['UTC']:
-    date = date.replace(hour=hr)
-
-    if prev_hr is not None and hr < prev_hr:
-      date += timedelta(days=1)
-
+  previous = forecast_date
+  for index, hour in enumerate(hours):
+    if 'FHR' in parsed_data and parsed_data['FHR'][index] is not None:
+      date = forecast_date + timedelta(hours=parsed_data['FHR'][index])
+      if date.hour != hour or date <= previous:
+        raise ValueError(f'Inconsistent forecast hours for {location}')
+    else:
+      date = previous.replace(hour=hour)
+      if date <= previous:
+        date += timedelta(days=1)
     dates.append(date)
-    prev_hr = hr
-
+    previous = date
   df['Time'] = dates
-
   return df
 
 
+def parse_noaa_product(product, fmt):
+  """Parse all stations, rejecting invalid/empty downloads before any uploads."""
+  # Split on station headers, not long blank runs inside sparse data rows.
+  headers = list(re.finditer(r'^[ \t]*\S+\s+NBM\s+V[\d.]+\s+' + fmt.upper() + r'\s+GUIDANCE[^\n]*$', product, re.MULTILINE))
+  stations = [product[header.start():headers[index + 1].start() if index + 1 < len(headers) else len(product)]
+              for index, header in enumerate(headers)]
+  if not stations:
+    raise ValueError(f'No stations in NOAA {fmt.upper()} product')
+  frames = [parse_noaa_data(station, fmt) for station in tqdm(stations, disable=None)]
+  # Some NOAA sites (for example buoys) omit aviation fields. Preserve those
+  # as nulls while requiring the overall product to supply the API's columns.
+  result = pd.concat(frames, ignore_index=True)
+  required = {'Location', 'Time', 'Forecast_Time', 'CIG', 'LCB', 'VIS', 'IFC', 'TMP', 'DPT', 'WDR', 'WSP'}
+  if result.empty or not required.issubset(result.columns):
+    raise ValueError(f'Incomplete NOAA {fmt.upper()} product')
+  return result
+
+
+def main(dry_run=False):
+  started = time.monotonic()
+  # Fetch and validate every source before replacing any live tables. Exceptions
+  # propagate so CI and Cloud Run report failed refreshes rather than success.
+  metar = get_metar_data()
+  nbh, nbs = get_noaa_data()
+  tables = {
+    'weather.metar': metar,
+    'weather.nbh': parse_noaa_product(nbh, 'nbh'),
+    'weather.nbs': parse_noaa_product(nbs, 'nbs'),
+  }
+  for table, frame in tables.items():
+    print(f'{table}: {len(frame)} rows, latest source time {frame.Forecast_Time.max()}', flush=True)
+  print(f'Download and parsing completed in {time.monotonic() - started:.1f}s', flush=True)
+  if dry_run:
+    return tables
+
+  credentials, project = google.auth.default()
+  for table, frame in tables.items():
+    schema = None
+    if table == 'weather.metar':
+      schema = [{'name': name, 'type': 'FLOAT'} for name in NUMERIC_METAR_COLUMNS]
+    pandas_gbq.to_gbq(frame, table, project, if_exists='replace',
+                      credentials=credentials, table_schema=schema)
+  return tables
+
+
 if __name__ == '__main__':
-  nbh = None
-  nbs = None
-  metar = None
-
-  try:
-    metar = get_metar_data()
-  except Exception as e:
-    print('Error getting METAR data. Skipping...')
-    print(e)
-
-  # Retry up to 10 times with 60 second delay
-  n_tries = 10
-  for i in range(n_tries):
-    try:
-      nbh, nbs = get_noaa_data()
-      break
-    except Exception as e:
-      print(e)
-      print(f'Error getting weather data. Retrying in 60 seconds... ({i + 1}/{n_tries})')
-      time.sleep(60)
-
-  df_nbh = None
-  if nbh is not None:
-    print('Parsing NBH forecast data...')
-
-    nbh = nbh.strip().split(' ' * 50)[1:]
-
-    df_nbh = pd.DataFrame()
-    for forecast in tqdm(nbh):
-      location_forecast = parse_noaa_data(forecast, 'nbh')
-      df_nbh = pd.concat([df_nbh, location_forecast])
-
-    df_nbh.to_csv('wx_nbh.csv', index=False)
-
-  df_nbs = None
-  if nbs is not None:
-    print('Parsing NBS forecast data...')
-
-    nbs = nbs.strip().split(' ' * 50)[1:]
-
-    df_nbs = pd.DataFrame()
-    for forecast in tqdm(nbs):
-      location_forecast = parse_noaa_data(forecast, 'nbs')
-      df_nbs = pd.concat([df_nbs, location_forecast])
-
-    df_nbs.to_csv('wx_nbs.csv', index=False)
-
-  print('Uploading to BigQuery...')
-
-  # Upload to BigQuery
-  if metar is not None:
-    pandas_gbq.to_gbq(metar, 'weather.metar', project, if_exists='replace', credentials=credentials)
-
-  if df_nbh is not None:
-    pandas_gbq.to_gbq(df_nbh, 'weather.nbh', project, if_exists='replace', credentials=credentials)
-
-  if df_nbs is not None:
-    pandas_gbq.to_gbq(df_nbs, 'weather.nbs', project, if_exists='replace', credentials=credentials)
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument('--dry-run', action='store_true', help='Download and parse without writing to BigQuery')
+  main(dry_run=parser.parse_args().dry_run)
