@@ -2,8 +2,9 @@
 Parse the FAA's CIFP file to extract airport and approach/FAF data.
 """
 
+import argparse
 import json
-import os
+import time
 import zipfile
 
 import arinc424.record as a424
@@ -14,9 +15,6 @@ import requests
 from charts import get_charts, merge_charts
 from tqdm import tqdm
 from bs4 import BeautifulSoup
-
-credentials, project = google.auth.default()
-
 
 def dms_to_dd(dms):
   """Convert a DMS string to a decimal degree float.
@@ -54,7 +52,8 @@ def get_current_cifp_cycle():
   #     return url, cycle
 
   url = 'https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/cifp/download/'
-  r = requests.get(url)
+  r = requests.get(url, timeout=(10, 60))
+  r.raise_for_status()
   soup = BeautifulSoup(r.text, 'html.parser')
 
   # Get first link in the table
@@ -74,10 +73,11 @@ def download_cifp(url):
 
   print('Downloading CIFP file...')
 
-  r = requests.get(url, stream=True)
+  r = requests.get(url, stream=True, timeout=(10, 60))
+  r.raise_for_status()
   total_size_in_bytes = int(r.headers.get('content-length', 0))
   block_size = 1024 #1 Kibibyte
-  progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True)
+  progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True, disable=None)
 
   with open('/tmp/cifp.zip', 'wb') as f:
     for data in r.iter_content(block_size):
@@ -105,7 +105,7 @@ def parse_cifp(file_path):
 
   print('Reading CIFP records...')
 
-  for line in tqdm(cifp):
+  for line in tqdm(cifp, disable=None):
     record = a424.Record()
     record.read(line)
     records.append(record)
@@ -115,7 +115,7 @@ def parse_cifp(file_path):
   apts = []
   fafs = []
 
-  for record in tqdm(records):
+  for record in tqdm(records, disable=None):
     is_apt = False
     is_faf = False
 
@@ -145,7 +145,8 @@ def parse_cifp(file_path):
   return df_apt, df_faf
 
 
-if __name__ == '__main__':
+def main(dry_run=False):
+  started = time.monotonic()
   url, cycle = get_current_cifp_cycle()
 
   print(f'Current CIFP cycle: {cycle}')
@@ -177,11 +178,24 @@ if __name__ == '__main__':
   # Merge charts
   df_faf = merge_charts(df_faf, df_charts)
 
+  print(f'Parsed {len(df_apt)} airports, {len(df_faf)} FAF records, and {len(df_charts)} charts in {time.monotonic() - started:.1f}s')
+  if dry_run:
+    return df_apt, df_faf
+
   df_apt.to_csv('apt.csv', index=False)
   df_faf.to_csv('faf.csv', index=False)
 
   print('Uploading to BigQuery...')
 
   # Upload to BigQuery
+  credentials, project = google.auth.default()
   pandas_gbq.to_gbq(df_apt, 'aeronautical.airport', project, if_exists='replace', credentials=credentials)
   pandas_gbq.to_gbq(df_faf, 'aeronautical.faf', project, if_exists='replace', credentials=credentials)
+
+  return df_apt, df_faf
+
+
+if __name__ == '__main__':
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument('--dry-run', action='store_true', help='Download and parse without writing to BigQuery or CSV files')
+  main(dry_run=parser.parse_args().dry_run)

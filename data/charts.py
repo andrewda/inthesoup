@@ -6,24 +6,21 @@ from tqdm import tqdm
 def get_charts(cycle):
   # Get the metafile
   metafile_url = f'https://aeronav.faa.gov/d-tpp/{cycle}/xml_data/d-tpp_Metafile.xml'
-  metafile_response = requests.get(metafile_url)
-  metafile = metafile_response.text
+  metafile_response = requests.get(metafile_url, timeout=(10, 60))
+  metafile_response.raise_for_status()
 
-  # Save to file
-  # with open(f'./d-tpp_Metafile.xml', 'w') as f:
-  #   f.write(metafile)
-
-  # Read the saved file
-  # metafile = open(f'./d-tpp_Metafile.xml', 'r').read()
-
-  # Parse the metafile
-  metafile_xml = ET.fromstring(metafile)
+  # FAA serves UTF-8 XML with a BOM as text/xml without an HTTP charset.
+  # response.text defaults to Latin-1, corrupting that BOM. Let the XML parser
+  # interpret the encoding declaration and BOM directly from the original bytes.
+  metafile_xml = ET.fromstring(metafile_response.content)
+  if metafile_xml.tag != 'digital_tpp' or metafile_xml.get('cycle') != str(cycle):
+    raise ValueError(f'Unexpected FAA chart metadata for cycle {cycle}')
 
   print('Parsing chart metafile...')
 
   # Get the chart URLs
   df_charts = pd.DataFrame(columns=['location', 'chart_name', 'pdf_name'])
-  for airport_element in tqdm(metafile_xml.iter('airport_name')):
+  for airport_element in tqdm(metafile_xml.iter('airport_name'), disable=None):
     location = airport_element.attrib['icao_ident']
 
     if location == '':
@@ -51,6 +48,8 @@ def get_charts(cycle):
 
       df_charts = pd.concat([df_charts, df])
 
+  if df_charts.empty:
+    raise ValueError(f'No charts in FAA metadata for cycle {cycle}')
   return df_charts
 
 
@@ -148,7 +147,7 @@ def merge_charts(df_faf, df_charts):
 
   print('Merging approaches with charts...')
 
-  for index, faf in tqdm(df_faf.iterrows(), total=len(df_faf)):
+  for index, faf in tqdm(df_faf.iterrows(), total=len(df_faf), disable=None):
     # Get the approach name
     possible_names = approach_id_to_names(faf['SIDSTARApproach_Identifier'])
 

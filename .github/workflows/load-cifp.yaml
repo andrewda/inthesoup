@@ -10,6 +10,7 @@ jobs:
   load-cifp:
     name: Load CIFP Data
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v2
       - name: Authenticate to Google Cloud
@@ -18,5 +19,7 @@ jobs:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
       - name: Install dependencies
         run: pip3 install -r data/requirements.txt
+      - name: Test CIFP loader
+        run: python3 -m pytest data/test_cifp.py -q
       - name: Load CIFP data
-        run: python3 data/load_cifp.py
+        run: python3 -u data/load_cifp.py

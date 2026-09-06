@@ -41,3 +41,24 @@ Sources:
 
 The NOAA regression fixtures contain KCVO bulletins from the September 6, 2026,
 17Z cycle. Their original fixed-width spacing is intentional.
+
+## CIFP loader
+
+Run the CIFP/chart tests and a full FAA download, parse, and chart merge with:
+
+```sh
+python3 -m pytest data/test_cifp.py -q
+python3 -u data/load_cifp.py --dry-run
+```
+
+The dry run uses temporary download files but writes neither BigQuery tables nor
+output CSVs and needs no Google credentials. Set `CIFP_LIVE_TEST=1` to include
+the live dry run in pytest. Without `--dry-run`, the loader writes CSVs and
+replaces `aeronautical.airport` and `aeronautical.faf` using Application Default
+Credentials.
+
+FAA chart metadata is parsed directly from response bytes so XML's encoding
+declaration and byte-order mark are respected even when HTTP omits the charset.
+HTTP errors, malformed XML, mismatched cycles, and empty chart catalogs fail the
+job before upload. Requests have connect/read timeouts and the GitHub workflow
+has a 15-minute overall limit.
