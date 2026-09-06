@@ -46,7 +46,7 @@ SELECT
   ROUND((ANY_VALUE(wx.TMP) - 32) * 5/9) AS TMP,
   ROUND((ANY_VALUE(wx.DPT) - 32) * 5/9) AS DPT,
   ANY_VALUE(wx.WSP) AS WSP,
-  CAST(ANY_VALUE(wx.IFC) / 100 AS FLOAT64) AS IFC,
+  SAFE_CAST(ANY_VALUE(wx.IFC) AS FLOAT64) / 100 AS IFC,
   ARRAY_AGG(Filtered_FAF_Airport.SIDSTARApproach_Identifier ORDER BY Filtered_FAF_Airport.SIDSTARApproach_Identifier ASC) AS Approach_Identifier,
   ARRAY_AGG(IFNULL(Filtered_FAF_Airport.Approach_Name, '') ORDER BY Filtered_FAF_Airport.SIDSTARApproach_Identifier ASC) AS Approach_Name,
   ARRAY_AGG(IFNULL(Filtered_FAF_Airport.PDF_Name, '') ORDER BY Filtered_FAF_Airport.SIDSTARApproach_Identifier ASC) AS PDF_Name,
