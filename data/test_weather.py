@@ -23,6 +23,7 @@ from load_weather import (
     round_to_nearest_10,
     parse_noaa_data,
     get_metar_data,
+    get_taf_data,
 )
 
 
@@ -331,12 +332,120 @@ class TestNOAAParsing:
             weather.parse_noaa_product(text, 'nbh')
 
 
+def taf_period(start, end, change=None, dir=270, speed=10, vis='10+', clouds=None):
+    return {
+        'fcst_time_from': f'2026-09-{6 + start // 24:02d}T{start % 24:02d}:00:00Z',
+        'fcst_time_to': f'2026-09-{6 + end // 24:02d}T{end % 24:02d}:00:00Z',
+        'change_indicator': change,
+        'wind_dir_degrees': dir,
+        'wind_speed_kt': speed,
+        'visibility_statute_mi': vis,
+        'clouds': clouds if clouds is not None else [{'sky_cover': 'OVC', 'cloud_base_ft_agl': '1500'}],
+    }
+
+
+def taf_record(periods, station='KCVO', issue_time='2026-09-06T17:39:00Z'):
+    return {'station_id': station, 'issue_time': issue_time, 'periods': periods}
+
+
+def taf_cache(records):
+    root = Element('response')
+    data = SubElement(root, 'data')
+    for record in records:
+        node = SubElement(data, 'TAF')
+        for name, value in record.items():
+            if name == 'periods':
+                for period in value:
+                    forecast = SubElement(node, 'forecast')
+                    for key, item in period.items():
+                        if key == 'clouds':
+                            for attrs in item:
+                                SubElement(forecast, 'sky_condition', attrs)
+                        elif item is not None:
+                            SubElement(forecast, key).text = str(item)
+            else:
+                SubElement(node, name).text = str(value)
+    return response(content=gzip.compress(tostring(root)))
+
+
+def tafs(mock_get, records):
+    mock_get.return_value = taf_cache(records)
+    return get_taf_data()
+
+
+class TestTAFCache:
+    @patch('load_weather.requests.get')
+    def test_hourly_rows_and_units(self, mock_get):
+        frame = tafs(mock_get, [taf_record([taf_period(18, 22)])])
+        assert len(frame) == 4
+        row = frame.iloc[0]
+        assert row.Time == datetime(2026, 9, 6, 18, tzinfo=pd.Timestamp.now(tz='UTC').tz)
+        assert row.Location == 'KCVO'
+        assert row.Forecast_Time == datetime(2026, 9, 6, 17, 39, tzinfo=pd.Timestamp.now(tz='UTC').tz)
+        assert row.CIG == 15  # API multiplies by 100 to return 1,500 ft AGL.
+        assert row.LCB == 15
+        assert row.WDR == 27
+        assert row.WSP == 10
+        assert row.VIS == pytest.approx(160.934)
+        assert pd.isna(row.IFC)
+        assert all(frame[col].dtype == 'float64' for col in weather.NUMERIC_TAF_COLUMNS)
+
+    @patch('load_weather.requests.get')
+    def test_tempo_overrides_base_only_in_its_window(self, mock_get):
+        periods = [
+            taf_period(18, 30, clouds=[{'sky_cover': 'BKN', 'cloud_base_ft_agl': '8000'}]),
+            taf_period(20, 23, change='TEMPO', clouds=[{'sky_cover': 'BKN', 'cloud_base_ft_agl': '2000'}]),
+        ]
+        frame = tafs(mock_get, [taf_record(periods)]).set_index('Time')
+        assert frame.loc['2026-09-06 19:00Z', 'CIG'] == 80
+        assert frame.loc['2026-09-06 20:00Z', 'CIG'] == 20
+        assert frame.loc['2026-09-06 22:00Z', 'CIG'] == 20
+        assert frame.loc['2026-09-06 23:00Z', 'CIG'] == 80
+        assert frame.loc['2026-09-07 05:00Z', 'CIG'] == 80
+
+    @patch('load_weather.requests.get')
+    def test_becmg_and_prob_are_skipped(self, mock_get):
+        periods = [
+            taf_period(18, 30, clouds=[{'sky_cover': 'BKN', 'cloud_base_ft_agl': '8000'}]),
+            taf_period(20, 22, change='BECMG', clouds=[{'sky_cover': 'BKN', 'cloud_base_ft_agl': '1000'}]),
+            taf_period(21, 24, change='PROB30', clouds=[{'sky_cover': 'OVC', 'cloud_base_ft_agl': '500'}]),
+        ]
+        frame = tafs(mock_get, [taf_record(periods)])
+        assert frame.CIG.unique().tolist() == [80]
+
+    @patch('load_weather.requests.get')
+    def test_few_and_nsc_are_not_ceilings(self, mock_get):
+        clouds = [{'sky_cover': 'FEW', 'cloud_base_ft_agl': '500'}, {'sky_cover': 'SCT', 'cloud_base_ft_agl': '900'}]
+        row = tafs(mock_get, [taf_record([taf_period(18, 19, clouds=clouds)])]).iloc[0]
+        assert pd.isna(row.CIG)
+        # Lowest cloud base matches the METAR rule: FEW is excluded.
+        assert row.LCB == 9
+
+    @patch('load_weather.requests.get')
+    def test_ovx_is_a_surface_ceiling(self, mock_get):
+        row = tafs(mock_get, [taf_record([taf_period(18, 19, clouds=[{'sky_cover': 'OVX'}])])]).iloc[0]
+        assert row.CIG == 0
+        assert row.LCB == 0
+
+    @patch('load_weather.requests.get')
+    def test_missing_wind_and_visibility_are_null(self, mock_get):
+        row = tafs(mock_get, [taf_record([taf_period(18, 19, dir=None, speed=None, vis=None, clouds=[])])]).iloc[0]
+        assert all(pd.isna(row[col]) for col in ['WDR', 'WSP', 'CIG', 'LCB', 'VIS'])
+
+    @patch('load_weather.requests.get')
+    def test_empty_cache_fails(self, mock_get):
+        mock_get.return_value = taf_cache([])
+        with pytest.raises(ValueError, match='Empty tafs'):
+            get_taf_data()
+
+
 class TestRefresh:
     @patch('load_weather.pandas_gbq.to_gbq')
     @patch('load_weather.google.auth.default')
     @patch('load_weather.get_noaa_data', side_effect=requests.Timeout('NOAA unavailable'))
+    @patch('load_weather.get_taf_data', return_value=pd.DataFrame({'Location': ['KCVO']}))
     @patch('load_weather.get_metar_data', return_value=pd.DataFrame({'Location': ['KCVO']}))
-    def test_failed_download_prevents_all_uploads(self, metar, noaa, auth, upload):
+    def test_failed_download_prevents_all_uploads(self, metar, taf, noaa, auth, upload):
         with pytest.raises(requests.Timeout):
             weather.main()
         auth.assert_not_called()
@@ -346,11 +455,12 @@ class TestRefresh:
     @patch('load_weather.google.auth.default')
     @patch('load_weather.parse_noaa_product')
     @patch('load_weather.get_noaa_data', return_value=('nbh', 'nbs'))
+    @patch('load_weather.get_taf_data')
     @patch('load_weather.get_metar_data')
-    def test_dry_run_needs_no_credentials_or_writes(self, metar, noaa, parse, auth, upload):
+    def test_dry_run_needs_no_credentials_or_writes(self, metar, taf, noaa, parse, auth, upload):
         frame = pd.DataFrame({'Forecast_Time': [datetime(2026, 9, 6)]})
-        metar.return_value = parse.return_value = frame
-        assert len(weather.main(dry_run=True)) == 3
+        metar.return_value = taf.return_value = parse.return_value = frame
+        assert len(weather.main(dry_run=True)) == 4
         auth.assert_not_called()
         upload.assert_not_called()
 
@@ -358,12 +468,13 @@ class TestRefresh:
     @patch('load_weather.google.auth.default', return_value=('credentials', 'inthesoup'))
     @patch('load_weather.parse_noaa_product')
     @patch('load_weather.get_noaa_data', return_value=('nbh', 'nbs'))
+    @patch('load_weather.get_taf_data')
     @patch('load_weather.get_metar_data')
-    def test_uploads_and_explicit_metar_schema(self, metar, noaa, parse, auth, upload):
+    def test_uploads_and_explicit_metar_schema(self, metar, taf, noaa, parse, auth, upload):
         frame = pd.DataFrame({'Forecast_Time': [datetime(2026, 9, 6)]})
-        metar.return_value = parse.return_value = frame
+        metar.return_value = taf.return_value = parse.return_value = frame
         weather.main()
-        assert [call.args[1] for call in upload.call_args_list] == ['weather.metar', 'weather.nbh', 'weather.nbs']
+        assert [call.args[1] for call in upload.call_args_list] == ['weather.metar', 'weather.taf', 'weather.nbh', 'weather.nbs']
         assert {'name': 'IFC', 'type': 'FLOAT'} in upload.call_args_list[0].kwargs['table_schema']
 
 

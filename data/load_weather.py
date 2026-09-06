@@ -22,6 +22,7 @@ HTTP_TIMEOUT = (10, 60)  # Connect and read timeouts, in seconds.
 NOAA_URL = 'https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/prod/'
 CACHE_URL = 'https://aviationweather.gov/data/cache/'
 NUMERIC_METAR_COLUMNS = ['TMP', 'DPT', 'WDR', 'WSP', 'CIG', 'LCB', 'VIS', 'IFC']
+NUMERIC_TAF_COLUMNS = ['WDR', 'WSP', 'CIG', 'LCB', 'VIS', 'IFC']
 
 
 def fetch(url):
@@ -191,6 +192,90 @@ def get_metar_data():
   return metar_data
 
 
+def forecast_cloud_bases(forecast):
+  """Collect TAF cloud bases (feet AGL) and ceilings from one forecast period."""
+  cloud_bases = []
+  ceilings = []
+  for cloud in forecast.findall('sky_condition'):
+    cover = cloud.get('sky_cover')
+    base = number(cloud.get('cloud_base_ft_agl'))
+    if cover in ('SCT', 'BKN', 'OVC', 'VV') and base is not None:
+      cloud_bases.append(base)
+      if cover in ('BKN', 'OVC', 'VV'):
+        ceilings.append(base)
+    elif cover == 'OVX':
+      # Obscured sky without a measured base is effectively a surface ceiling.
+      ceilings.append(0)
+      cloud_bases.append(0)
+  return cloud_bases, ceilings
+
+
+def get_taf_data():
+  """Read the AWC TAF cache, expanding each forecast period into hourly rows.
+
+  Only TEMPO periods modify the base (FM) line; BECMG/PROB30/PROB40 are too
+  uncertain to gate an approach search and are skipped. Cloud heights are
+  converted from feet AGL to hundreds of feet to match the other tables.
+  """
+  rows = []
+  for taf in read_cache('tafs', 'TAF'):
+    station = taf.findtext('station_id')
+    issued_text = taf.findtext('issue_time')
+    if not station or not issued_text:
+      continue
+    issued = datetime.fromisoformat(issued_text.replace('Z', '+00:00'))
+    periods = []
+    base = None
+    for forecast in taf.findall('forecast'):
+      change = forecast.findtext('change_indicator')
+      if change in ('BECMG',) or (change is not None and change.startswith('PROB')):
+        continue
+      if change == 'TEMPO':
+        if base is not None:
+          periods.append((True, forecast))
+        continue
+      base = forecast
+      periods.append((False, forecast))
+
+    # TEMPO rows cover just their window; base rows fill the remaining hours.
+    hourly = {}
+    for is_tempo, forecast in periods:
+      start_text = forecast.findtext('fcst_time_from')
+      end_text = forecast.findtext('fcst_time_to')
+      if not start_text or not end_text:
+        continue
+      start = datetime.fromisoformat(start_text.replace('Z', '+00:00'))
+      end = datetime.fromisoformat(end_text.replace('Z', '+00:00'))
+      if end <= start:
+        continue
+      cloud_bases, ceilings = forecast_cloud_bases(forecast)
+      direction_text = forecast.findtext('wind_dir_degrees')
+      direction = 0 if direction_text == 'VRB' else number(direction_text)
+      visibility = number(forecast.findtext('visibility_statute_mi'))
+      row = {
+        'Location': station,
+        'Forecast_Time': issued,
+        'WDR': direction / 10 if direction is not None else None,
+        'WSP': number(forecast.findtext('wind_speed_kt')),
+        'CIG': min(ceilings) / 100 if ceilings else None,
+        'LCB': min(cloud_bases) / 100 if cloud_bases else None,
+        'VIS': sm_to_km(visibility) * 10 if visibility is not None else None,
+        'IFC': None,
+      }
+      while start < end:
+        hour = start.replace(minute=0, second=0, microsecond=0)
+        if is_tempo or hour not in hourly:
+          hourly[hour] = dict(row, Time=hour)
+        start = hour + timedelta(hours=1)
+    rows.extend(hourly.values())
+
+  if not rows:
+    raise ValueError('No TAF forecasts parsed from the AWC cache')
+  taf_data = pd.DataFrame(rows)
+  taf_data[NUMERIC_TAF_COLUMNS] = taf_data[NUMERIC_TAF_COLUMNS].astype('float64')
+  return taf_data
+
+
 def parse_noaa_data(data, fmt):
   """Parse weather data for a specific location
   @param data: The weather data to parse
@@ -263,9 +348,11 @@ def main(dry_run=False):
   # Fetch and validate every source before replacing any live tables. Exceptions
   # propagate so CI and Cloud Run report failed refreshes rather than success.
   metar = get_metar_data()
+  taf = get_taf_data()
   nbh, nbs = get_noaa_data()
   tables = {
     'weather.metar': metar,
+    'weather.taf': taf,
     'weather.nbh': parse_noaa_product(nbh, 'nbh'),
     'weather.nbs': parse_noaa_product(nbs, 'nbs'),
   }
@@ -280,6 +367,8 @@ def main(dry_run=False):
     schema = None
     if table == 'weather.metar':
       schema = [{'name': name, 'type': 'FLOAT'} for name in NUMERIC_METAR_COLUMNS]
+    elif table == 'weather.taf':
+      schema = [{'name': name, 'type': 'FLOAT'} for name in NUMERIC_TAF_COLUMNS]
     pandas_gbq.to_gbq(frame, table, project, if_exists='replace',
                       credentials=credentials, table_schema=schema)
   return tables
