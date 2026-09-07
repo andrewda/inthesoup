@@ -1,11 +1,13 @@
 import Head from 'next/head'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Table from './components/Table'
+import { groupForecasts } from '../lib/forecastGroups'
 
 export default function Home() {
   const [airport, setAirport] = useState('')
   const [radius, setRadius] = useState('50')
   const [forecast, setForecast] = useState('metar')
+  const [resultSource, setResultSource] = useState('metar')
   const [minCeiling, setMinCeiling] = useState('0')
   const [startHour, setStartHour] = useState('0')
   const [endHour, setEndHour] = useState('23')
@@ -13,6 +15,7 @@ export default function Home() {
 
   const [loading, setLoading] = useState(false)
   const [forecasts, setForecasts] = useState<any[] | null>(null)
+  const airportGroups = useMemo(() => groupForecasts(forecasts ?? [], resultSource), [forecasts, resultSource])
   const [darkMode, setDarkMode] = useState<'light' | 'dark' | 'system'>('system')
 
   // Handle dark mode
@@ -75,6 +78,7 @@ export default function Home() {
         }
 
         setForecasts(data)
+        setResultSource(forecast)
         setLoading(false)
       })
   }
@@ -342,10 +346,10 @@ export default function Home() {
               <div className="animate-fade-in">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                    {forecasts.length} {forecasts.length === 1 ? 'result' : 'results'} found
+                    {airportGroups.length} {airportGroups.length === 1 ? 'airport' : 'airports'} found
                   </h2>
                 </div>
-                <Table forecasts={forecasts} />
+                <Table groups={airportGroups} />
               </div>
             )}
           </div>
