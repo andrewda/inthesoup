@@ -13,6 +13,7 @@ export type Forecast = {
 };
 
 export type ForecastPeriod = {
+  gapBefore: boolean;
   start: string;
   end: string;
   ceiling: number | null;
@@ -61,6 +62,8 @@ export function groupForecasts(forecasts: Forecast[], source: string): AirportGr
         }
       } else {
         periods.push({
+          gapBefore: Boolean(previous && interval !== null &&
+            Date.parse(row.time) - Date.parse(previous.end) > interval),
           start: row.time,
           end: row.time,
           ceiling: row.weather.ceiling,

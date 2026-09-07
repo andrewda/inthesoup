@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { AirportGroup, formatPeriod, formatCloudBases } from "../../lib/forecastGroups";
 
 const colorMap: Record<string, string> = {
@@ -76,11 +76,27 @@ export default function Table({ groups }: { groups: AirportGroup[] }) {
                   <th scope="col" className="px-2 py-3 pr-4 sm:pr-6">Approaches</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {periods.map(period => {
+              <tbody>
+                {periods.map((period, index) => {
                   const label = formatPeriod(period.start, period.end, localTime);
                   return (
-                    <tr key={period.start} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                    <Fragment key={period.start}>
+                    {period.gapBefore && (
+                      <tr>
+                        <td colSpan={3} className="p-0" title="Gap in matching forecast times">
+                          <span className="sr-only">Gap in matching forecast times</span>
+                          <svg aria-hidden="true" className="block h-3 w-full text-slate-300 dark:text-slate-500" width="100%" height="12">
+                            <defs>
+                              <pattern id={`gap-${airport.icao}-${index}`} width="24" height="12" patternUnits="userSpaceOnUse">
+                                <path d="M-12 6 Q-6 12 0 6 T12 6 T24 6 T36 6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                              </pattern>
+                            </defs>
+                            <rect width="100%" height="12" fill={`url(#gap-${airport.icao}-${index})`} />
+                          </svg>
+                        </td>
+                      </tr>
+                    )}
+                    <tr className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 ${index > 0 && !period.gapBefore ? 'border-t border-slate-200 dark:border-slate-700' : ''}`}>
                       <td className="py-4 pl-4 pr-2 sm:pl-6 align-top">
                         <div className="font-medium text-slate-900 dark:text-white">{label.time}</div>
                         <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{label.date}</div>
@@ -97,6 +113,7 @@ export default function Table({ groups }: { groups: AirportGroup[] }) {
                         </div>
                       </td>
                     </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>

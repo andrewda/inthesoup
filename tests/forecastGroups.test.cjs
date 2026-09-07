@@ -68,3 +68,12 @@ test('KTMK NBS matching ceilings merge despite changing tooltip cloud bases', ()
   assert.equal(group.periods[0].end, row(15).time);
   assert.equal(formatCloudBases(group.periods[0].lowestCloudBases), 'LCB: 900–1,300 ft');
 });
+test('gap separators respect NBS cadence and the end of merged periods', () => {
+  const rows = [row(3), ...[6, 9, 12, 15].map(hour => row(hour, {
+    weather: { ceiling: 1300, lowest_cloud_base: 1000 },
+  })), row(18), row(15, { time: '2026-09-09T15:00:00Z' })];
+  assert.deepEqual(groupForecasts(rows, 'nbs')[0].periods.map(p => p.gapBefore),
+    [false, false, false, true]);
+  assert.deepEqual(groupForecasts([row(6), row(9)], 'nbh')[0].periods.map(p => p.gapBefore),
+    [false, true]);
+});
