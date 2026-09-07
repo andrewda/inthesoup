@@ -17,27 +17,34 @@ export default function Home() {
   const [forecasts, setForecasts] = useState<any[] | null>(null)
   const airportGroups = useMemo(() => groupForecasts(forecasts ?? [], resultSource), [forecasts, resultSource])
   const [darkMode, setDarkMode] = useState<'light' | 'dark' | 'system'>('system')
+  const [themeReady, setThemeReady] = useState(false)
 
   // Handle dark mode
   useEffect(() => {
-    const savedMode = localStorage.getItem('darkMode') as 'light' | 'dark' | 'system' | null
-    if (savedMode) {
-      setDarkMode(savedMode)
-    }
+    try {
+      const savedMode = localStorage.getItem('darkMode')
+      if (savedMode === 'light' || savedMode === 'dark' || savedMode === 'system') {
+        setDarkMode(savedMode)
+      }
+    } catch (_) {}
+    setThemeReady(true)
   }, [])
 
   useEffect(() => {
+    // Don't overwrite the pre-paint theme with the initial React state.
+    if (!themeReady) return
     const root = window.document.documentElement
-    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-
-    if (darkMode === 'system') {
-      root.classList.toggle('dark', systemDark)
-    } else {
-      root.classList.toggle('dark', darkMode === 'dark')
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const applyTheme = () => {
+      const dark = darkMode === 'dark' || (darkMode === 'system' && media.matches)
+      root.classList.toggle('dark', dark)
+      root.style.colorScheme = dark ? 'dark' : 'light'
     }
-
-    localStorage.setItem('darkMode', darkMode)
-  }, [darkMode])
+    applyTheme()
+    try { localStorage.setItem('darkMode', darkMode) } catch (_) {}
+    media.addEventListener('change', applyTheme)
+    return () => media.removeEventListener('change', applyTheme)
+  }, [darkMode, themeReady])
 
   const handleSubmit = (e: any) => {
     e.preventDefault()
