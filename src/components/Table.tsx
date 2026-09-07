@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { AirportGroup, formatPeriod, formatCloudBases, formatGapDuration } from "../../lib/forecastGroups";
+import { AirportGroup, formatPeriod, formatCloudBases, formatGapDuration } from "../lib/forecastGroups";
 
 const colorMap: Record<string, string> = {
   'ILS': 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 ring-blue-200 dark:ring-blue-800',

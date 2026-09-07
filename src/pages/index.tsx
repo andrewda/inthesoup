@@ -1,6 +1,6 @@
 import Head from 'next/head'
 import { useState, useEffect, useMemo } from 'react'
-import Table from './components/Table'
+import Table from '../components/Table'
 import { groupForecasts } from '../lib/forecastGroups'
 
 export default function Home() {
