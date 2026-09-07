@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { AirportGroup, formatPeriod, formatCloudBases } from "../../lib/forecastGroups";
+import { AirportGroup, formatPeriod, formatCloudBases, formatGapDuration } from "../../lib/forecastGroups";
 
 const colorMap: Record<string, string> = {
   'ILS': 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 ring-blue-200 dark:ring-blue-800',
@@ -83,16 +83,20 @@ export default function Table({ groups }: { groups: AirportGroup[] }) {
                     <Fragment key={period.start}>
                     {period.gapBefore && (
                       <tr>
-                        <td colSpan={3} className="p-0" title="Gap in matching forecast times">
-                          <span className="sr-only">Gap in matching forecast times</span>
-                          <svg aria-hidden="true" className="block h-3 w-full text-slate-300 dark:text-slate-500" width="100%" height="12">
-                            <defs>
-                              <pattern id={`gap-${airport.icao}-${index}`} width="24" height="12" patternUnits="userSpaceOnUse">
-                                <path d="M-12 6 Q-6 12 0 6 T12 6 T24 6 T36 6" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                              </pattern>
-                            </defs>
-                            <rect width="100%" height="12" fill={`url(#gap-${airport.icao}-${index})`} />
-                          </svg>
+                        <td colSpan={3} className="p-0">
+                          <div className="relative flex h-5 items-center pl-4 sm:pl-6">
+                            <svg aria-hidden="true" className="absolute left-0 top-1/2 -translate-y-1/2 block h-3 w-full text-slate-300 dark:text-slate-500" width="100%" height="12">
+                              <defs>
+                                <pattern id={`gap-${airport.icao}-${index}`} width="24" height="12" patternUnits="userSpaceOnUse">
+                                  <path d="M-12 6 Q-6 12 0 6 T12 6 T24 6 T36 6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                                </pattern>
+                              </defs>
+                              <rect width="100%" height="12" fill={`url(#gap-${airport.icao}-${index})`} />
+                            </svg>
+                            <span className="relative -ml-1 px-1 rounded-full bg-white dark:bg-slate-800 text-xs font-light text-slate-500 dark:text-slate-400">
+                              {formatGapDuration(periods[index - 1].end, period.start)}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     )}

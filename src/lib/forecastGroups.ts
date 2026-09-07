@@ -77,6 +77,15 @@ export function groupForecasts(forecasts: Forecast[], source: string): AirportGr
   }).sort((a, b) => a.airport.distance - b.airport.distance || a.airport.icao.localeCompare(b.airport.icao));
 }
 
+export function formatGapDuration(previousEnd: string, nextStart: string) {
+  const totalMinutes = Math.round((Date.parse(nextStart) - Date.parse(previousEnd)) / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  return [days && `${days}d`, hours && `${hours}h`, minutes && `${minutes}m`]
+    .filter(Boolean).join(' ') + ' gap';
+}
+
 export function formatPeriod(start: string, end: string, local: boolean) {
   const first = new Date(start);
   const last = new Date(end);
