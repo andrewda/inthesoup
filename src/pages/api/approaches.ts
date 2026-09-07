@@ -62,7 +62,12 @@ INNER JOIN
 ON
   Filtered_FAF_Airport.Airport_Identifier = apt.Airport_ICAO_Identifier
 INNER JOIN
-  \`inthesoup.weather.[FORECAST_TYPE]\` AS wx
+  (
+    SELECT
+      *[EXTRA_COLUMNS]
+    FROM
+      \`inthesoup.weather.[FORECAST_TYPE]\`
+  ) AS wx
 ON
   Filtered_FAF_Airport.Airport_Identifier = wx.Location
 WHERE
@@ -211,8 +216,15 @@ export default async function handler(
     return;
   }
 
-  // Use NBH for 24hr forecast, NBS for 72hr forecast
-  const query = baseQuery.replace('[FORECAST_TYPE]', forecast)
+  // TAFs have no temperature/dewpoint; add null columns so every source
+  // shares the weather column set the SELECT list expects.
+  const extraColumns = forecast === 'taf'
+    ? ', NULL AS TMP, NULL AS DPT'
+    : '';
+
+  const query = baseQuery
+    .replace('[FORECAST_TYPE]', forecast)
+    .replace('[EXTRA_COLUMNS]', extraColumns)
 
   const options = {
     query,
