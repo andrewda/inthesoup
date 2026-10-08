@@ -93,7 +93,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>In the Soup</title>
+        <title>In the Soup | Find Approaches in IMC</title>
         <meta name="description" content="Find nearby instrument approaches in IMC." />
       </Head>
 
