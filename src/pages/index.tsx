@@ -365,6 +365,17 @@ export default function Home() {
         {/* Footer - Fixed to bottom */}
         <footer className="mt-auto border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 transition-colors duration-300 flex-shrink-0">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+            <p className="mt-2 text-center text-sm text-slate-500 dark:text-slate-400">
+              Made with ☁️ by{' '}
+              <a
+                href="https://github.com/andrewda"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-sky-600 hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300 transition-colors"
+              >
+                Andrew Dassonville
+              </a>
+            </p>
             <p className="text-center text-sm text-slate-500 dark:text-slate-400">
               Weather data provided by NOAA Aviation Weather Center
             </p>
