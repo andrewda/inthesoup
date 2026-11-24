@@ -289,8 +289,10 @@ def parse_noaa_data(data, fmt):
   header = lines[0].split()
   location = header[0]
   forecast_date = datetime.strptime(' '.join(header[-3:]), '%m/%d/%Y %H%M %Z')
-  fields = {line[:5].strip(): line[5:] for line in lines[1:]
-            if re.match(r'^ [A-Z][A-Z0-9]{1,2} ', line) and line[:5].strip() != 'DT'}
+  # Field names occupy the first five columns. The NBS date row has been both
+  # ' DT      /SEP   7' and ' DT /NOV  25', so compare only the first token.
+  fields = {line[:5].split()[0]: line[5:] for line in lines[1:]
+            if re.match(r'^ [A-Z][A-Z0-9]{1,2} ', line) and line[:5].split()[0] != 'DT'}
   if 'UTC' not in fields:
     raise ValueError(f'Missing UTC hours for {location}')
   hours = [int(hour) for hour in fields['UTC'].split()]
@@ -328,7 +330,8 @@ def parse_noaa_data(data, fmt):
 def parse_noaa_product(product, fmt):
   """Parse all stations, rejecting invalid/empty downloads before any uploads."""
   # Split on station headers, not long blank runs inside sparse data rows.
-  headers = list(re.finditer(r'^[ \t]*\S+\s+NBM\s+V[\d.]+\s+' + fmt.upper() + r'\s+GUIDANCE[^\n]*$', product, re.MULTILINE))
+  # NOAA dropped the version from headers in late 2026 ('NBM V5.0 NBH' -> 'NBM  NBH').
+  headers = list(re.finditer(r'^[ \t]*\S+\s+NBM\s+(?:V[\d.]+\s+)?' + fmt.upper() + r'\s+GUIDANCE[^\n]*$', product, re.MULTILINE))
   stations = [product[header.start():headers[index + 1].start() if index + 1 < len(headers) else len(product)]
               for index, header in enumerate(headers)]
   if not stations:

@@ -298,6 +298,23 @@ class TestNOAAParsing:
         assert frame.Time.is_monotonic_increasing
         assert not frame.UTC.isna().any()
 
+    @pytest.mark.parametrize('fmt,count,first_hour', [('nbh', 25, 0), ('nbs', 23, 3)])
+    def test_real_noaa_unversioned_bulletin(self, fmt, count, first_hour):
+        # Since late 2026 headers omit the version and the NBS row reads ' DT /NOV  25'.
+        product = (Path(__file__).parent / 'fixtures' / f'noaa_{fmt}_2026-11.txt').read_text()
+        frame = weather.parse_noaa_product(product, fmt)
+        assert len(frame) == count
+        assert frame.Location.unique().tolist() == ['KCVO']
+        assert frame.iloc[0].Time == datetime(2026, 11, 25, first_hour)
+        assert {'CIG', 'LCB', 'VIS', 'IFC'}.issubset(frame.columns)
+
+    @pytest.mark.parametrize('fmt', ['nbh', 'nbs'])
+    @pytest.mark.parametrize('name', ['noaa_{}.txt', 'noaa_{}_2026-11.txt'])
+    def test_column_names_are_bigquery_safe(self, fmt, name):
+        product = (Path(__file__).parent / 'fixtures' / name.format(fmt)).read_text()
+        for column in weather.parse_noaa_product(product, fmt).columns:
+            assert column.replace('_', '').isalnum(), column
+
     def test_sparse_row_does_not_split_station(self):
         product = station_product('nbh') + '\n P06 ' + ' ' * 60 + '\n'
         assert len(weather.parse_noaa_product(product, 'nbh')) == 2

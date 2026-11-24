@@ -40,7 +40,10 @@ Sources:
 - [AWC bulk caches and API limits](https://aviationweather.gov/data/api/#cache)
 
 The NOAA regression fixtures contain KCVO bulletins from the September 6, 2026,
-17Z cycle. Their original fixed-width spacing is intentional.
+17Z cycle (`noaa_nb[hs].txt`) and the November 24, 2026, 23Z cycle
+(`noaa_nb[hs]_2026-11.txt`). By November NOAA had dropped the version from
+station headers (`NBM V5.0 NBH` became `NBM  NBH`) and shortened the NBS date
+row to ` DT /NOV  25`. Their original fixed-width spacing is intentional.
 
 ## CIFP loader
 
