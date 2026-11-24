@@ -19,5 +19,7 @@ jobs:
           credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
       - name: Install dependencies
         run: pip3 install -r data/requirements.txt
+      - name: Test weather loader
+        run: python3 -m pytest data/test_weather.py -q
       - name: Load weather data
         run: python3 -u data/load_weather.py
