@@ -42,6 +42,38 @@ Sources:
 The NOAA regression fixtures contain KCVO bulletins from the September 6, 2026,
 17Z cycle. Their original fixed-width spacing is intentional.
 
+## Docker
+
+`data/Dockerfile` packages both loaders with pinned dependencies, so they run
+without a local Python environment. Build from the repo root:
+
+```sh
+docker build -t inthesoup-data data
+```
+
+The image's entrypoint is `python3 -u`, and its default command is
+`load_weather.py --dry-run`, so these need no credentials and write nothing:
+
+```sh
+docker run --rm inthesoup-data                              # weather dry run
+docker run --rm inthesoup-data -m pytest -q                 # all data tests
+docker run --rm inthesoup-data load_cifp.py --dry-run       # CIFP dry run
+```
+
+To write to BigQuery, mount a service account key and point Application Default
+Credentials at it. The project comes from the key file:
+
+```sh
+docker run --rm \
+  -v /path/to/key.json:/secrets/key.json:ro \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/key.json \
+  inthesoup-data load_weather.py
+```
+
+With user credentials from `gcloud auth application-default login` instead,
+mount `~/.config/gcloud/application_default_credentials.json` the same way and
+also set `GOOGLE_CLOUD_PROJECT`, since user credentials carry no project.
+
 ## CIFP loader
 
 Run the CIFP/chart tests and a full FAA download, parse, and chart merge with:
