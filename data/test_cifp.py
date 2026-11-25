@@ -122,6 +122,20 @@ def test_cifp_http_errors_fail_before_parsing_or_extraction(mock_get, function, 
     assert mock_get.call_args.kwargs['timeout'] == (10, 60)
 
 
+def test_output_dir_writes_csv_instead_of_bigquery(tmp_path):
+    fixture = os.path.join(os.path.dirname(__file__), 'fixtures', 'fap_vor_a.txt')
+    with patch('load_cifp.get_current_cifp_cycle', return_value=('https://example.test/cifp.zip', '2609')), \
+         patch('load_cifp.download_cifp', return_value=fixture), \
+         patch('load_cifp.get_charts', return_value=pd.DataFrame()), \
+         patch('load_cifp.merge_charts', side_effect=lambda faf, charts: faf), \
+         patch('load_cifp.google.auth.default') as auth, \
+         patch('load_cifp.pandas_gbq.to_gbq') as upload:
+        load_cifp.main(output_dir=str(tmp_path))
+    auth.assert_not_called()
+    upload.assert_not_called()
+    assert sorted(path.name for path in tmp_path.iterdir()) == ['aeronautical.airport.csv', 'aeronautical.faf.csv']
+    assert pd.read_csv(tmp_path / 'aeronautical.airport.csv').Airport_ICAO_Identifier.tolist() == ['09J']
+
 @pytest.mark.skipif(os.environ.get('CIFP_LIVE_TEST') != '1', reason='Set CIFP_LIVE_TEST=1 for live FAA downloads')
 def test_live_cifp_dry_run():
     with patch('load_cifp.google.auth.default') as auth, patch('load_cifp.pandas_gbq.to_gbq') as upload:

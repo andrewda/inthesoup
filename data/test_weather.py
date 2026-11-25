@@ -478,6 +478,22 @@ class TestRefresh:
         assert {'name': 'IFC', 'type': 'FLOAT'} in upload.call_args_list[0].kwargs['table_schema']
 
 
+    @patch('load_weather.pandas_gbq.to_gbq')
+    @patch('load_weather.google.auth.default')
+    @patch('load_weather.parse_noaa_product')
+    @patch('load_weather.get_noaa_data', return_value=('nbh', 'nbs'))
+    @patch('load_weather.get_taf_data')
+    @patch('load_weather.get_metar_data')
+    def test_output_dir_writes_csv_instead_of_bigquery(self, metar, taf, noaa, parse, auth, upload, tmp_path):
+        frame = pd.DataFrame({'Location': ['KCVO'], 'Forecast_Time': [datetime(2026, 9, 6)]})
+        metar.return_value = taf.return_value = parse.return_value = frame
+        weather.main(output_dir=str(tmp_path / 'out'))
+        auth.assert_not_called()
+        upload.assert_not_called()
+        names = sorted(path.name for path in (tmp_path / 'out').iterdir())
+        assert names == ['weather.metar.csv', 'weather.nbh.csv', 'weather.nbs.csv', 'weather.taf.csv']
+        assert pd.read_csv(tmp_path / 'out' / 'weather.metar.csv').Location.tolist() == ['KCVO']
+
 @pytest.mark.skipif(os.environ.get('WEATHER_LIVE_TEST') != '1', reason='Set WEATHER_LIVE_TEST=1 for live downloads')
 def test_live_weather_downloads():
     tables = weather.main(dry_run=True)

@@ -13,3 +13,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . ./
 
 ENTRYPOINT ["python3", "-u"]
+# With no arguments, do a safe download-and-parse check that writes nothing.
+CMD ["load_weather.py", "--dry-run"]
