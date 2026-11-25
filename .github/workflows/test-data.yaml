@@ -1,0 +1,29 @@
+name: Test Data Loaders
+
+on:
+  push:
+    paths:
+      - 'data/**'
+      - '.github/workflows/test-data.yaml'
+  pull_request:
+    paths:
+      - 'data/**'
+      - '.github/workflows/test-data.yaml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Matches data/Dockerfile
+          cache: pip
+          cache-dependency-path: data/requirements.txt
+      - name: Install dependencies
+        run: pip install -r data/requirements.txt
+      - name: Run tests
+        run: python -m pytest data -q
