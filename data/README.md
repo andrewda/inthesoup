@@ -60,6 +60,23 @@ docker run --rm inthesoup-data -m pytest -q                 # all data tests
 docker run --rm inthesoup-data load_cifp.py --dry-run       # CIFP dry run
 ```
 
+To keep the data locally instead of in BigQuery, pass `--output-dir`. Each
+loader then writes one CSV per table, named after it (`weather.metar.csv`,
+`weather.taf.csv`, `weather.nbh.csv`, `weather.nbs.csv`,
+`aeronautical.airport.csv`, `aeronautical.faf.csv`), and needs no credentials.
+Running as your own user keeps the files from being owned by root:
+
+```sh
+mkdir -p out
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/out:/out" \
+  inthesoup-data load_weather.py --output-dir /out
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/out:/out" \
+  inthesoup-data load_cifp.py --output-dir /out
+```
+
+The same flag works outside Docker. The Next.js API still reads only from
+BigQuery.
+
 To write to BigQuery, mount a service account key and point Application Default
 Credentials at it. The project comes from the key file:
 

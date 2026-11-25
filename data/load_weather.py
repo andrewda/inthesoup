@@ -4,6 +4,7 @@ Loads weather data from NOAA and uploads it to BigQuery.
 
 import argparse
 import gzip
+import os
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -343,7 +344,7 @@ def parse_noaa_product(product, fmt):
   return result
 
 
-def main(dry_run=False):
+def main(dry_run=False, output_dir=None):
   started = time.monotonic()
   # Fetch and validate every source before replacing any live tables. Exceptions
   # propagate so CI and Cloud Run report failed refreshes rather than success.
@@ -361,6 +362,14 @@ def main(dry_run=False):
   print(f'Download and parsing completed in {time.monotonic() - started:.1f}s', flush=True)
   if dry_run:
     return tables
+  if output_dir:
+    # Local files instead of BigQuery: one CSV per table, named after it.
+    os.makedirs(output_dir, exist_ok=True)
+    for table, frame in tables.items():
+      path = os.path.join(output_dir, table + '.csv')
+      frame.to_csv(path, index=False)
+      print(f'Wrote {path}', flush=True)
+    return tables
 
   credentials, project = google.auth.default()
   for table, frame in tables.items():
@@ -377,4 +386,6 @@ def main(dry_run=False):
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--dry-run', action='store_true', help='Download and parse without writing to BigQuery')
-  main(dry_run=parser.parse_args().dry_run)
+  parser.add_argument('--output-dir', help='Write <table>.csv files here instead of writing to BigQuery')
+  args = parser.parse_args()
+  main(dry_run=args.dry_run, output_dir=args.output_dir)

@@ -4,6 +4,7 @@ Parse the FAA's CIFP file to extract airport and approach/FAF data.
 
 import argparse
 import json
+import os
 import time
 import zipfile
 
@@ -147,7 +148,7 @@ def parse_cifp(file_path):
   return df_apt, df_faf
 
 
-def main(dry_run=False):
+def main(dry_run=False, output_dir=None):
   started = time.monotonic()
   url, cycle = get_current_cifp_cycle()
 
@@ -183,6 +184,14 @@ def main(dry_run=False):
   print(f'Parsed {len(df_apt)} airports, {len(df_faf)} FAF records, and {len(df_charts)} charts in {time.monotonic() - started:.1f}s')
   if dry_run:
     return df_apt, df_faf
+  if output_dir:
+    # Local files instead of BigQuery: one CSV per table, named after it.
+    os.makedirs(output_dir, exist_ok=True)
+    for table, frame in (('aeronautical.airport', df_apt), ('aeronautical.faf', df_faf)):
+      path = os.path.join(output_dir, table + '.csv')
+      frame.to_csv(path, index=False)
+      print(f'Wrote {path}')
+    return df_apt, df_faf
 
   df_apt.to_csv('apt.csv', index=False)
   df_faf.to_csv('faf.csv', index=False)
@@ -200,4 +209,6 @@ def main(dry_run=False):
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--dry-run', action='store_true', help='Download and parse without writing to BigQuery or CSV files')
-  main(dry_run=parser.parse_args().dry_run)
+  parser.add_argument('--output-dir', help='Write <table>.csv files here instead of writing to BigQuery')
+  args = parser.parse_args()
+  main(dry_run=args.dry_run, output_dir=args.output_dir)
